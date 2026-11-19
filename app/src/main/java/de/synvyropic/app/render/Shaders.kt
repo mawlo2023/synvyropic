@@ -463,4 +463,60 @@ void main() {
     fragColor = vec4(texture(uScene, vUv).rgb, 1.0) * m * uAlpha;
 }
 """
+
+    /** Wie CLIP, aber für Videobilder (SurfaceTexture, OES) mit Transformationsmatrix. */
+    const val CLIP_OES = """#version 300 es
+#extension GL_OES_EGL_image_external_essl3 : require
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform samplerExternalOES uTex;
+uniform mat4 uTexMatrix;
+uniform vec2 uCenter;
+uniform vec2 uSpan;
+uniform int uMode;
+uniform vec2 uBgSpan;
+uniform vec4 uG1;
+uniform vec3 uG2;
+uniform vec3 uShadow;
+uniform vec3 uHigh;
+
+vec3 grade(vec3 c) {
+    if (uG2.z < 0.5) return c;
+    c += uG1.x * 0.25;
+    c = (c - 0.5) * (1.0 + uG1.y) + 0.5;
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 1.0 + uG1.z);
+    c.r += uG1.w * 0.08;
+    c.b -= uG1.w * 0.08;
+    c.g += uG2.x * 0.06;
+    float lt = clamp(l, 0.0, 1.0);
+    c += uShadow * (1.0 - smoothstep(0.0, 0.6, lt)) + uHigh * smoothstep(0.4, 1.0, lt);
+    c = uG2.y + c * (1.0 - uG2.y);
+    return clamp(c, 0.0, 1.0);
+}
+
+// Bildkoordinaten (y nach unten) → Videotextur
+vec3 img(vec2 uv) {
+    vec2 gl = vec2(uv.x, 1.0 - uv.y);
+    return texture(uTex, (uTexMatrix * vec4(gl, 0.0, 1.0)).xy).rgb;
+}
+
+void main() {
+    vec2 st = vec2(vUv.x, 1.0 - vUv.y);
+    vec2 uv = uCenter + (st - 0.5) * uSpan;
+    if (uMode == 1 && (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)) {
+        // Unscharfer Rand: 9 weit gestreute Abtastungen (Videos haben keine Mipmaps)
+        vec2 bg = 0.5 + (st - 0.5) * uBgSpan;
+        vec2 d = uBgSpan * 0.04;
+        vec3 c = vec3(0.0);
+        for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) {
+            c += img(clamp(bg + vec2(float(x), float(y)) * d, 0.0, 1.0));
+        }
+        fragColor = vec4(grade(c / 9.0) * 0.55, 1.0);
+        return;
+    }
+    fragColor = vec4(grade(img(clamp(uv, 0.0, 1.0))), 1.0);
+}
+"""
 }

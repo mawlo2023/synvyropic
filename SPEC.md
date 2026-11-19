@@ -3,7 +3,7 @@
 > Android-App, die aus Einzelbildern und Musik automatisch beat-synchrone Reels und Slideshows
 > mit professionellen GPU-Übergängen erzeugt.
 >
-> Status: **Version 1.0 veröffentlicht** – 1.1 in Arbeit – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
+> Status: **Version 1.0 veröffentlicht** – 1.1 fertig, 1.2 in Arbeit – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
 
 ---
 
@@ -174,8 +174,14 @@ Ein Stil ist eine Regelmenge: Schnittraster, Übergangspool (gewichtet), Effekt 
 | 3D-Parallax | ML-Kit-Selfie-Segmentierung (offline) für Fotos mit Gesichtern; Person zoomt stärker, Hintergrund leicht unscharf |
 | Text hinter Person | Textstil „Hinter der Person“: Person wird aus dem fertigen Bild über die Texte gezeichnet |
 
-## 7b. Version 1.2 (geplant)
-Videoclips als Quelle (Zuschnitt, Originalton mit Ducking, Drehung), Tempo-Rampen (Zeitlupe → Zeitraffer auf dem Beat).
+## 7b. Version 1.2
+| Funktion | Umsetzung |
+|---|---|
+| Videoclips | Import aus Galerie/Google Fotos (Kopie im Projekt), Länge/Drehung/Ton per MediaMetadataRetriever, Gesichter auf Standbild bei ⅓ |
+| Darstellung | MediaCodec → SurfaceTexture (OES) → eigener Clip-Shader mit Transformationsmatrix; framegenau im Export, flüssig in der Vorschau |
+| Auto-Schnitt | Video bekommt so viele Beats, wie in den Ausschnitt passen (1–4 Raster, Rampe berücksichtigt); kein Ken-Burns-Zoom |
+| Tempo-Rampen | Normal, Zeitlupe, Zeitraffer, Langsam→schnell, Schnell→langsam, Beat-Velocity; Quellzeit = ∫ Geschwindigkeit, nie über den Ausschnitt hinaus; bei Fotos wirkt die Rampe auf die Zoom-Fahrt |
+| Ton | Originalton pro Video (Lautstärke), Musik währenddessen auf 35 % (Ducking); Export-Mix 48 kHz Stereo; bei Rampen stumm |
 
 ## 8. Später denkbar (nicht MVP)
 Videoclips als Quelle · Sticker/Overlays · Velocity/Speed-Ramps · Templates teilen · Auto-Reihenfolge nach Bildqualität · KI-Hintergrund-Entfernung · Tonspur aus Video übernehmen.

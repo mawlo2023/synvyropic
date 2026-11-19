@@ -58,6 +58,8 @@ class PreviewController(context: Context) {
     fun setProject(p: Project) {
         val old = project
         project = p
+        resolver = de.synvyropic.model.FrameResolver(p)
+        stopClipAudio()
         _duration.value = Timeline.durationMs(p)
         renderer.pending.set(p)
         val music = p.music
@@ -122,6 +124,7 @@ class PreviewController(context: Context) {
         isPlaying = false
         _playing.value = false
         player?.takeIf { it.isPlaying }?.pause()
+        stopClipAudio()
         view.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
         main.removeCallbacks(ticker)
         _position.value = basePos
@@ -139,6 +142,7 @@ class PreviewController(context: Context) {
         baseTime = SystemClock.elapsedRealtime()
         _position.value = t
         if (isPlaying) project?.music?.let { player?.seekTo((it.startMs + t).toInt()) }
+        stopClipAudio() // wird im nächsten Takt passend neu gestartet
         view.requestRender()
     }
 
@@ -152,6 +156,7 @@ class PreviewController(context: Context) {
     fun release() {
         pause()
         releasePlayer()
+        stopClipAudio()
         view.queueEvent { renderer.release() }
     }
 
@@ -179,6 +184,7 @@ class PreviewController(context: Context) {
                 return
             }
             _position.value = t
+            updateClipAudio(t)
             applyVolume(t)
             main.postDelayed(this, 40)
         }
@@ -186,8 +192,49 @@ class PreviewController(context: Context) {
 
     private fun applyVolume(t: Long) {
         val m = project?.music ?: return
-        val g = gain(m, t, _duration.value)
+        // Ducking: Musik leiser, solange Originalton eines Videos läuft
+        val duck = if (clipPlayer != null) 0.35f else 1f
+        val g = gain(m, t, _duration.value) * duck
         player?.setVolume(g, g)
+    }
+
+    // ---------------- Originalton von Videoclips
+    private var resolver: de.synvyropic.model.FrameResolver? = null
+    private var clipPlayer: MediaPlayer? = null
+    private var clipIndex = -1
+
+    private fun updateClipAudio(t: Long) {
+        val r = resolver ?: return
+        val p = project ?: return
+        val i = r.indexAt(t)
+        if (i == clipIndex) return
+        stopClipAudio()
+        clipIndex = i
+        val tc = r.timed.getOrNull(i) ?: return
+        val info = p.imageInfo[tc.clip.imageUri] ?: return
+        val v = info.video ?: return
+        if (!v.hasAudio || !v.keepAudio || info.ramp != de.synvyropic.model.SpeedRamp.NONE) return
+        val spec = r.at(t)
+        val src = when {
+            spec == null -> v.trimStartMs
+            spec.a.clipIndex == i -> spec.a.videoMs ?: v.trimStartMs
+            else -> spec.b?.videoMs ?: v.trimStartMs
+        }
+        clipPlayer = runCatching {
+            MediaPlayer().apply {
+                setDataSource(tc.clip.imageUri)
+                prepare()
+                seekTo(src.toInt())
+                setVolume(v.audioVolume, v.audioVolume)
+                start()
+            }
+        }.getOrNull()
+    }
+
+    private fun stopClipAudio() {
+        clipPlayer?.release()
+        clipPlayer = null
+        clipIndex = -1
     }
 
     private inner class Renderer : GLSurfaceView.Renderer {

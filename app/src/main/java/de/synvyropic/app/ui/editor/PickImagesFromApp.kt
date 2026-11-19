@@ -14,7 +14,8 @@ class PickImagesFromApp : ActivityResultContract<Unit, List<Uri>>() {
 
     override fun createIntent(context: Context, input: Unit): Intent {
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-            type = "image/*"
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
             addCategory(Intent.CATEGORY_OPENABLE)
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
         }

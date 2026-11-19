@@ -157,7 +157,32 @@ data class ImageInfo(
     val maskPath: String? = null,
     /** Freistellung wurde versucht (auch wenn keine Person gefunden). */
     val maskTried: Boolean = false,
+    /** Gesetzt, wenn das Medium ein Video ist. */
+    val video: VideoInfo? = null,
+    /** Tempo-Rampe (bei Fotos: wirkt auf die Zoom-Fahrt). */
+    val ramp: SpeedRamp = SpeedRamp.NONE,
 )
+
+/** Video-Eigenschaften und Einstellungen. */
+@Serializable
+data class VideoInfo(
+    val durationMs: Long,
+    /** Anzeigegröße (Drehung bereits berücksichtigt). */
+    val width: Int,
+    val height: Int,
+    val hasAudio: Boolean = true,
+    val trimStartMs: Long = 0,
+    val trimEndMs: Long? = null,
+    val keepAudio: Boolean = true,
+    val audioVolume: Float = 1f,
+) {
+    val trimEnd: Long get() = (trimEndMs ?: durationMs).coerceIn(trimStartMs + 100, durationMs.coerceAtLeast(trimStartMs + 100))
+    val trimmedMs: Long get() = trimEnd - trimStartMs
+}
+
+/** Tempo-Verlauf eines Clips. */
+@Serializable
+enum class SpeedRamp { NONE, SLOW_MO, FAST, SLOW_TO_FAST, FAST_TO_SLOW, BEAT_VELOCITY }
 
 @Serializable
 data class KenBurns(

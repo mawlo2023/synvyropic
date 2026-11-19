@@ -69,7 +69,21 @@ object AutoCut {
         val rnd = Random(seed)
         val framings = HashMap<Pair<String, Int>, Framing.Result>()
         fun frame(uri: String, i: Int) = framings.getOrPut(uri to i) {
-            Framing.frame(imageInfo[uri], format, i, style.kenBurnsStrength, rnd)
+            val info = imageInfo[uri]
+            val f = Framing.frame(info, format, i, style.kenBurnsStrength, rnd)
+            // Videos bewegen sich selbst: kein Ken-Burns-Zoom, nur Ausrichtung auf die Gesichter
+            if (info?.video != null) f.copy(motion = f.motion.copy(
+                startScale = 1f, endScale = 1f,
+                startCenterX = (f.motion.startCenterX + f.motion.endCenterX) / 2, endCenterX = (f.motion.startCenterX + f.motion.endCenterX) / 2,
+                startCenterY = (f.motion.startCenterY + f.motion.endCenterY) / 2, endCenterY = (f.motion.startCenterY + f.motion.endCenterY) / 2,
+            )) else f
+        }
+        /** Länge eines Videos in Beats: so viel, wie in den Ausschnitt passt (1–4 Raster). */
+        fun videoBeats(uri: String, beatMs: Float): Int {
+            val info = imageInfo[uri] ?: return beatsPerCut
+            val v = info.video ?: return beatsPerCut
+            val ms = v.trimmedMs / SpeedCurve.meanSpeed(info.ramp)
+            return ((ms / beatMs / beatsPerCut).toInt() * beatsPerCut).coerceIn(beatsPerCut, beatsPerCut * 4)
         }
         val grid = music?.beats?.takeIf { it.beatsMs.size >= 2 && it.bpm > 0f }
 
@@ -79,7 +93,9 @@ object AutoCut {
                     id = "$idPrefix$i",
                     imageUri = uri,
                     durationBeats = beatsPerCut,
-                    durationMsFallback = 2000,
+                    durationMsFallback = imageInfo[uri]?.video?.let { v ->
+                        (v.trimmedMs / SpeedCurve.meanSpeed(imageInfo[uri]!!.ramp)).toLong().coerceIn(1000, 6000)
+                    } ?: 2000,
                     motion = frame(uri, i).motion,
                     fit = frame(uri, i).fit,
                     transitionIn = if (i == 0) Transition(TransitionType.CUT, 0)
@@ -100,15 +116,25 @@ object AutoCut {
         val beatMs = 60000f / grid.bpm
         val availableBeats = grid.beatsMs.count { it in startMs until endMs }
 
-        val slots = when (lengthMode) {
-            LengthMode.FIT_IMAGES -> imageUris.size
-            LengthMode.FIT_MUSIC -> maxOf(imageUris.size.coerceAtMost(1), availableBeats / beatsPerCut)
+        // Plätze bestimmen: Videos belegen ggf. mehrere Raster
+        val clipBeats = ArrayList<Int>()
+        run {
+            var used = 0
+            var i = 0
+            while (true) {
+                if (lengthMode == LengthMode.FIT_IMAGES && i >= imageUris.size) break
+                val b = videoBeats(imageUris[i % imageUris.size], beatMs)
+                if (lengthMode == LengthMode.FIT_MUSIC && i > 0 && used + b > availableBeats) break
+                clipBeats += b; used += b; i++
+                if (i > 2000) break
+            }
         }
         val downbeats = grid.downbeatIndices.toHashSet()
         val drops = grid.dropIndices.toHashSet()
+        val startBeat = IntArray(clipBeats.size).also { arr -> var acc = 0; for (k in arr.indices) { arr[k] = acc; acc += clipBeats[k] } }
 
-        val clips = (0 until slots).map { i ->
-            val beatIdx = firstIdx + i * beatsPerCut
+        val clips = clipBeats.indices.map { i ->
+            val beatIdx = firstIdx + startBeat[i]
             val trans = when {
                 i == 0 -> Transition(TransitionType.CUT, 0)
                 beatIdx in drops -> transition(style.dropTransition, (beatMs * 1.5f).roundToLong(), style, 1f, rnd)
@@ -120,8 +146,8 @@ object AutoCut {
             Clip(
                 id = "$idPrefix$i",
                 imageUri = uri,
-                durationBeats = beatsPerCut,
-                durationMsFallback = (beatMs * beatsPerCut).roundToLong(),
+                durationBeats = clipBeats[i],
+                durationMsFallback = (beatMs * clipBeats[i]).roundToLong(),
                 motion = framed.motion,
                 fit = framed.fit,
                 transitionIn = trans,

@@ -39,7 +39,8 @@ class VideoExporter(private val context: Context) {
         val fps = project.export.fps
 
         // 1) Audio vorab kodieren (0–15 %)
-        val audio = project.music?.let { m -> AudioRenderer.render(m, durationMs) { onProgress(it * 0.15f) } }
+        // Musik + Originalton der Videos (mit Ducking)
+        val audio = AudioRenderer.render(project, durationMs) { onProgress(it * 0.15f) }
 
         // 2) Zieldatei in der Galerie anlegen
         val resolver = context.contentResolver

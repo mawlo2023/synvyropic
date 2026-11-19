@@ -226,7 +226,7 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
     ) { padding ->
         val project = state.project ?: return@Scaffold
         val actions = EditorActions(
-            pickGallery = { pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            pickGallery = { pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
             pickGooglePhotos = { pickFromApp.launch(Unit) },
             pickMusic = { pickMusic.launch(arrayOf("audio/*")) },
             // .cube hat keinen festen MIME-Typ → alle Dateien zulassen, Prüfung beim Import
@@ -318,7 +318,7 @@ private fun NameSection(project: Project, vm: EditorViewModel) {
 
 @Composable
 private fun ImagesSection(project: Project, state: EditorState, vm: EditorViewModel, a: EditorActions) {
-    Section("Bilder", 1, Rgb.Red) {
+    Section("Bilder & Videos", 1, Rgb.Red) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(onClick = a.pickGallery) {
                 Icon(Icons.Filled.PhotoLibrary, null); Spacer(Modifier.width(8.dp)); Text("Galerie")
@@ -382,6 +382,7 @@ private fun ImagesSection(project: Project, state: EditorState, vm: EditorViewMo
                         index = i,
                         faces = info?.faces?.size,
                         warning = when (path) { in dupes -> "doppelt"; in blurry -> "unscharf"; else -> null },
+                        videoMs = info?.video?.trimmedMs,
                         fitLabel = fitLabel(info?.fit, vm.resolvedFit(path)),
                         onFit = { vm.cycleFit(path) },
                         isFirst = i == 0,
@@ -398,7 +399,7 @@ private fun ImagesSection(project: Project, state: EditorState, vm: EditorViewMo
 
 @Composable
 private fun ImageThumb(
-    path: String, index: Int, faces: Int?, warning: String?, fitLabel: String, onFit: () -> Unit,
+    path: String, index: Int, faces: Int?, warning: String?, videoMs: Long?, fitLabel: String, onFit: () -> Unit,
     isFirst: Boolean, isLast: Boolean,
     onLeft: () -> Unit, onRight: () -> Unit, onRemove: () -> Unit,
 ) {
@@ -418,6 +419,14 @@ private fun ImageThumb(
             )
             IconButton(onClick = onRemove, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) {
                 Icon(Icons.Filled.Close, "Entfernen", modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(50)))
+            }
+            if (videoMs != null) {
+                Text(
+                    "▶ ${formatMs(videoMs)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.align(Alignment.Center)
+                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
+                )
             }
             if (warning != null) {
                 Text(

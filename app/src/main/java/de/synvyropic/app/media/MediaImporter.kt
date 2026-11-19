@@ -37,6 +37,19 @@ class MediaImporter(private val context: Context) {
         out
     }
 
+    fun isVideo(uri: Uri): Boolean = context.contentResolver.getType(uri)?.startsWith("video/") == true
+
+    /** Video unverändert ins Projekt kopieren (Name beginnt mit „vid_“). */
+    suspend fun importVideo(uri: Uri, targetDir: File): File = withContext(Dispatchers.IO) {
+        val ext = displayName(uri)?.substringAfterLast('.', "mp4")?.lowercase()?.takeIf { it.length in 2..4 } ?: "mp4"
+        val out = File(targetDir, "vid_${UUID.randomUUID()}.$ext")
+        context.contentResolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { "Video kann nicht geöffnet werden" }
+            out.outputStream().use { input.copyTo(it, 1 shl 16) }
+        }
+        out
+    }
+
     /** Logo (z. B. PNG mit Transparenz) als PNG speichern, max. 1024 px. */
     suspend fun importLogo(uri: Uri, targetDir: File): File = withContext(Dispatchers.IO) {
         val source = ImageDecoder.createSource(context.contentResolver, uri)

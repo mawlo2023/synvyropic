@@ -16,6 +16,8 @@ data class ClipState(
     val maskPath: String? = null,
     /** Fortschritt durch die Sichtbarkeit des Clips 0..1 (für Parallax). */
     val progress: Float = 0f,
+    /** Video: anzuzeigende Stelle im Quellvideo (ms); null bei Fotos. */
+    val videoMs: Long? = null,
 )
 
 /**
@@ -52,6 +54,17 @@ class FrameResolver(private val project: Project, private val beatDecayMs: Float
             beatTimes = LongArray(idx.size) { grid.beatsMs[idx[it]] - start }
             beatStrengths = FloatArray(idx.size) { grid.strengths.getOrElse(idx[it]) { 1f } }
         }
+    }
+
+    private val tables = HashMap<Int, SpeedCurve.Table>()
+
+    /** Tempo-Tabelle eines Clips (Beats relativ zum Clip-Beginn für Beat-Velocity). */
+    private fun table(k: Int): SpeedCurve.Table = tables.getOrPut(k) {
+        val tc = timed[k]
+        val ramp = project.imageInfo[tc.clip.imageUri]?.ramp ?: SpeedRamp.NONE
+        val len = (tc.endMs - tc.startMs).coerceAtLeast(1)
+        val beats = beatTimes.filter { it >= tc.startMs && it < tc.endMs }.map { (it - tc.startMs).toFloat() }.toFloatArray()
+        SpeedCurve.Table(ramp, len, beats)
     }
 
     fun at(tMs: Long): FrameSpec? {
@@ -100,14 +113,20 @@ class FrameResolver(private val project: Project, private val beatDecayMs: Float
     /** Ken Burns läuft über die gesamte Sichtbarkeit inkl. der halben Übergänge an beiden Enden. */
     private fun state(k: Int, t: Long): ClipState {
         val tc = timed[k]
+        val info = project.imageInfo[tc.clip.imageUri]
+        val video = info?.video
+        val ramp = info?.ramp ?: SpeedRamp.NONE
+        val videoMs = video?.let { v -> table(k).sourceMs(t - tc.startMs, v.trimStartMs, v.trimmedMs) }
         val m = tc.clip.motion
         val mask = project.imageInfo[tc.clip.imageUri]?.maskPath
-        if (!m.enabled) return ClipState(k, tc.clip.imageUri, 1f, 0.5f, 0.5f, tc.clip.fit, tc.clip.color, mask, visibleProgress(k, t))
+        if (!m.enabled) return ClipState(k, tc.clip.imageUri, 1f, 0.5f, 0.5f, tc.clip.fit, tc.clip.color, mask, visibleProgress(k, t), videoMs)
         val dIn = if (k > 0) activeDuration(tc.clip) / 2 else 0
         val dOut = if (k + 1 < timed.size) activeDuration(timed[k + 1].clip) / 2 else 0
         val s = tc.startMs - dIn
         val e = tc.endMs + dOut
-        val u = if (e > s) ((t - s).toFloat() / (e - s)).coerceIn(0f, 1f) else 0f
+        val linearU = if (e > s) ((t - s).toFloat() / (e - s)).coerceIn(0f, 1f) else 0f
+        // Tempo-Rampe bei Fotos: Zoom-Fahrt folgt der Geschwindigkeitskurve
+        val u = if (video == null && ramp != SpeedRamp.NONE) table(k).progress(t - tc.startMs) else linearU
         return ClipState(
             clipIndex = k,
             imageUri = tc.clip.imageUri,
@@ -118,6 +137,7 @@ class FrameResolver(private val project: Project, private val beatDecayMs: Float
             color = tc.clip.color,
             maskPath = mask,
             progress = u,
+            videoMs = videoMs,
         )
     }
 

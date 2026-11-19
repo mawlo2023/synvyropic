@@ -57,6 +57,7 @@ dependencies {
     implementation(project(":core-model"))
     implementation(project(":audio"))
     implementation(libs.coil.compose)
+    implementation(libs.coil.video)
     implementation(libs.mlkit.face)
     implementation(libs.mlkit.selfie)
 

@@ -27,6 +27,7 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 androidx-compose-material-icons = { group = "androidx.compose.material", name = "material-icons-extended" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+coil-video = { group = "io.coil-kt", name = "coil-video", version.ref = "coil" }
 mlkit-face = { group = "com.google.mlkit", name = "face-detection", version.ref = "mlkitFace" }
 mlkit-selfie = { group = "com.google.mlkit", name = "segmentation-selfie", version.ref = "mlkitSelfie" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }

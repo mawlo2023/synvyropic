@@ -1,5 +1,6 @@
 package de.synvyropic.app.render
 
+import android.opengl.GLES11Ext
 import android.opengl.GLES30
 import de.synvyropic.model.ClipEffectType
 import android.util.Half
@@ -47,6 +48,9 @@ class Compositor(val width: Int, val height: Int) {
     private var overlayResolver: OverlayResolver? = null
     private var parallax = 0f
     private var projectMasks: Map<String, String> = emptyMap()
+    private var projectVideos: Set<String> = emptySet()
+    private val videos = HashMap<String, VideoFrameSource>()
+    private val clipOesProgram = GlProgram(Shaders.VERTEX, Shaders.CLIP_OES, "clip-video")
 
     /** Lage der freigestellten Person im aktuellen Frame (für die Personen-Ebene). */
     private class Subject(val mask: String, val cx: Float, val cy: Float, val sx: Float, val sy: Float, val alpha: Float)
@@ -93,11 +97,12 @@ class Compositor(val width: Int, val height: Int) {
         overlays.setProject(project, o)
         parallax = project.parallax
         projectMasks = project.imageInfo.mapNotNull { (k, v) -> v.maskPath?.let { k to it } }.toMap()
+        projectVideos = project.imageInfo.filterValues { it.video != null }.keys
         grade = project.color
         cinema = project.cinema
         projectParams = ColorLooks.resolve(grade)
         if (grade.lutPath != loadedLutPath) loadLut(grade.lutPath)
-        r.neededAround(0).forEach { cache.prefetch(r.timed[it].clip.imageUri) }
+        r.neededAround(0).map { r.timed[it].clip.imageUri }.filter { it !in projectVideos }.forEach(cache::prefetch)
     }
 
     val durationMs: Long get() = resolver?.durationMs ?: 0L
@@ -154,6 +159,15 @@ class Compositor(val width: Int, val height: Int) {
         return complete
     }
 
+    /** Foto-Textur oder Video-Decoder (auf die Quellzeit gestellt) für einen Clip. */
+    private fun source(st: ClipState, blocking: Boolean, tex: (String) -> ImageTexture): Pair<ImageTexture?, VideoFrameSource?> {
+        val ms = st.videoMs ?: return tex(st.imageUri) to null
+        val v = videos[st.imageUri] ?: runCatching { VideoFrameSource(st.imageUri) }.getOrNull()?.also { videos[st.imageUri] = it }
+        if (v == null) return black to null
+        runCatching { v.seekTo(ms, blocking) }
+        return null to v
+    }
+
     /** Person aus dem fertigen Bild über die „hinteren“ Texte zeichnen. */
     private fun drawSubjects(scene: Fbo, blocking: Boolean) {
         GLES30.glEnable(GLES30.GL_BLEND)
@@ -189,10 +203,11 @@ class Compositor(val width: Int, val height: Int) {
     private fun renderScene(r: FrameResolver, tMs: Long, target: Fbo, blocking: Boolean): Boolean {
         val spec = r.at(tMs) ?: return true
         // Vorladen der nächsten Bilder
-        val needed = r.neededAround(tMs).flatMap { i ->
-            val uri = r.timed[i].clip.imageUri
-            listOfNotNull(uri, projectMasks[uri])
-        }
+        val aroundUris = r.neededAround(tMs).map { r.timed[it].clip.imageUri }
+        val needed = aroundUris.filter { it !in projectVideos }.flatMap { listOfNotNull(it, projectMasks[it]) }
+        // Video-Decoder nur für aktuelle/nächste Clips offen halten
+        val keepVideos = aroundUris.filter { it in projectVideos }.toSet()
+        videos.keys.filter { it !in keepVideos }.forEach { videos.remove(it)?.release() }
         needed.forEach(cache::prefetch)
         cache.evict(needed.toSet())
 
@@ -209,12 +224,14 @@ class Compositor(val width: Int, val height: Int) {
 
         subjects.clear()
         val pB = if (spec.b != null) spec.progress else 0f
-        drawClip(tex(spec.a.imageUri), spec.a, fboA, pulseZoom, blocking, subjectAlpha = if (spec.b == null) 1f else (1f - 2f * pB).coerceIn(0f, 1f))
+        val (texA, vidA) = source(spec.a, blocking, ::tex)
+        drawClip(texA, vidA, spec.a, fboA, pulseZoom, blocking, subjectAlpha = if (spec.b == null) 1f else (1f - 2f * pB).coerceIn(0f, 1f))
         var source = fboA
         val b = spec.b
         val tr = spec.transition
         if (b != null && tr != null) {
-            drawClip(tex(b.imageUri), b, fboB, pulseZoom, blocking, subjectAlpha = (2f * pB - 1f).coerceIn(0f, 1f))
+            val (texB, vidB) = source(b, blocking, ::tex)
+            drawClip(texB, vidB, b, fboB, pulseZoom, blocking, subjectAlpha = (2f * pB - 1f).coerceIn(0f, 1f))
             fboC.bind()
             transitionProgram.use()
             bindTexture(0, fboA.texture)
@@ -276,12 +293,27 @@ class Compositor(val width: Int, val height: Int) {
     }
 
     /** Bild „cover“ in das Format einpassen, Ken-Burns-Zoom/Schwenk anwenden. */
-    private fun drawClip(tex: ImageTexture, state: ClipState, target: Fbo, extraZoom: Float, blocking: Boolean, subjectAlpha: Float) {
+    private fun drawClip(
+        tex: ImageTexture?, video: VideoFrameSource?, state: ClipState, target: Fbo,
+        extraZoom: Float, blocking: Boolean, subjectAlpha: Float,
+    ) {
         target.bind()
-        clipProgram.use()
-        bindTexture(0, tex.id)
-        clipProgram.set1i("uTex", 0)
-        val imageAspect = tex.width.toFloat() / tex.height
+        val prog = if (video != null) clipOesProgram else clipProgram
+        prog.use()
+        val texW: Int
+        val texH: Int
+        if (video != null) {
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, video.textureId)
+            prog.setMat4("uTexMatrix", video.transform)
+            texW = video.width; texH = video.height
+        } else {
+            val t = tex ?: black
+            bindTexture(0, t.id)
+            texW = t.width; texH = t.height
+        }
+        prog.set1i("uTex", 0)
+        val imageAspect = texW.toFloat() / texH
         val outAspect = width.toFloat() / height
         // „Cover“: Bild füllt das Format (Span ≤ 1 je Achse)
         val coverX: Float
@@ -289,39 +321,39 @@ class Compositor(val width: Int, val height: Int) {
         if (imageAspect > outAspect) { coverX = outAspect / imageAspect; coverY = 1f } else { coverX = 1f; coverY = imageAspect / outAspect }
         val zoom = (state.scale * extraZoom).coerceAtLeast(1f)
         val c = if (state.color == null) projectParams else ColorLooks.resolve(grade, state.color)
-        clipProgram.set4f("uG1", c.brightness, c.contrast, c.saturation, c.temperature)
-        clipProgram.set3f("uG2", c.tint, c.fade, if (c.isIdentity) 0f else 1f)
-        clipProgram.set3f("uShadow", c.shadowTint.r, c.shadowTint.g, c.shadowTint.b)
-        clipProgram.set3f("uHigh", c.highlightTint.r, c.highlightTint.g, c.highlightTint.b)
+        prog.set4f("uG1", c.brightness, c.contrast, c.saturation, c.temperature)
+        prog.set3f("uG2", c.tint, c.fade, if (c.isIdentity) 0f else 1f)
+        prog.set3f("uShadow", c.shadowTint.r, c.shadowTint.g, c.shadowTint.b)
+        prog.set3f("uHigh", c.highlightTint.r, c.highlightTint.g, c.highlightTint.b)
         if (state.fit == FitMode.BLUR) {
             // „Contain“: ganzes Bild sichtbar (Span ≥ 1), Rand = unscharfer Hintergrund
             val containX = coverX / minOf(coverX, coverY)
             val containY = coverY / minOf(coverX, coverY)
-            clipProgram.set1i("uMode", 1)
-            clipProgram.set1f("uParallax", 0f)
-            clipProgram.set2f("uCenter", 0.5f, 0.5f)
-            clipProgram.set2f("uSpan", containX / zoom, containY / zoom)
-            clipProgram.set2f("uBgSpan", coverX * 0.9f, coverY * 0.9f)
+            prog.set1i("uMode", 1)
+            prog.set1f("uParallax", 0f)
+            prog.set2f("uCenter", 0.5f, 0.5f)
+            prog.set2f("uSpan", containX / zoom, containY / zoom)
+            prog.set2f("uBgSpan", coverX * 0.9f, coverY * 0.9f)
         } else {
             val spanX = coverX / zoom
             val spanY = coverY / zoom
             val cx = if (spanX >= 1f) 0.5f else state.centerX.coerceIn(spanX / 2, 1f - spanX / 2)
             val cy = if (spanY >= 1f) 0.5f else state.centerY.coerceIn(spanY / 2, 1f - spanY / 2)
-            clipProgram.set1i("uMode", 0)
-            clipProgram.set2f("uCenter", cx, cy)
-            clipProgram.set2f("uSpan", spanX, spanY)
+            prog.set1i("uMode", 0)
+            prog.set2f("uCenter", cx, cy)
+            prog.set2f("uSpan", spanX, spanY)
             // Parallax / Personen-Ebene
             val maskPath = state.maskPath
             val mask = maskPath?.let { if (blocking) cache.getBlocking(it) else cache.getIfReady(it) }
             val fgZoom = 1f + parallax * 0.10f * state.progress
-            if (mask != null && parallax > 0.001f) {
+            if (mask != null && parallax > 0.001f && video == null) {
                 bindTexture(1, mask.id)
-                clipProgram.set1i("uMask", 1)
-                clipProgram.set1f("uParallax", parallax)
-                clipProgram.set1f("uFgZoom", fgZoom)
+                prog.set1i("uMask", 1)
+                prog.set1f("uParallax", parallax)
+                prog.set1f("uFgZoom", fgZoom)
                 GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             } else {
-                clipProgram.set1f("uParallax", 0f)
+                prog.set1f("uParallax", 0f)
             }
             if (maskPath != null && subjectAlpha > 0.01f) {
                 val z = if (parallax > 0.001f) fgZoom else 1f
@@ -378,6 +410,9 @@ class Compositor(val width: Int, val height: Int) {
         if (accCreated) fboAcc.release()
         copyProgram.release()
         subjectProgram.release()
+        clipOesProgram.release()
+        videos.values.forEach { it.release() }
+        videos.clear()
         GLES30.glDeleteTextures(1, intArrayOf(lutTexture), 0)
         clipProgram.release(); postProgram.release(); transitionProgram.release()
         quad.release()

@@ -10,6 +10,7 @@ import com.google.mlkit.vision.segmentation.Segmentation
 import com.google.mlkit.vision.segmentation.selfie.SelfieSegmenterOptions
 import de.synvyropic.model.FaceBox
 import de.synvyropic.model.ImageInfo
+import de.synvyropic.model.VideoInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -29,6 +30,43 @@ object FaceAnalyzer {
                 .build(),
         )
     }
+
+    fun isVideoFile(file: File) = file.name.startsWith("vid_")
+
+    /** Video: Länge, Größe (gedreht), Ton; Gesichter auf einem Standbild bei 1/3 der Länge. */
+    suspend fun analyzeVideo(file: File): ImageInfo = withContext(Dispatchers.Default) {
+        android.media.MediaMetadataRetriever().use { r ->
+            r.setDataSource(file.absolutePath)
+            val dur = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            val w0 = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+            val h0 = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            val rot = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            val audio = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes"
+            val w = if (rot % 180 != 0) h0 else w0
+            val h = if (rot % 180 != 0) w0 else h0
+            val video = VideoInfo(durationMs = dur, width = w, height = h, hasAudio = audio)
+            val frame = r.getScaledFrameAtTime(dur * 1000 / 3, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 1280, 1280)
+            if (frame == null) return@withContext ImageInfo(w, h, video = video, maskTried = true)
+            val faces = detect(frame)
+            val metrics = runCatching { metrics(frame) }.getOrNull()
+            frame.recycle()
+            ImageInfo(w, h, faces, dhash = metrics?.second, colorfulness = metrics?.third, video = video, maskTried = true)
+        }
+    }
+
+    private suspend fun detect(bmp: Bitmap): List<FaceBox> = try {
+        val result = suspendCancellableCoroutine { cont ->
+            detector.process(InputImage.fromBitmap(bmp, 0))
+                .addOnSuccessListener { cont.resume(it) }
+                .addOnFailureListener { cont.resumeWithException(it) }
+        }
+        val bw = bmp.width.toFloat()
+        val bh = bmp.height.toFloat()
+        result.map { f ->
+            val rc = f.boundingBox
+            FaceBox((rc.left / bw).coerceIn(0f, 1f), (rc.top / bh).coerceIn(0f, 1f), (rc.right / bw).coerceIn(0f, 1f), (rc.bottom / bh).coerceIn(0f, 1f))
+        }.filter { it.width > 0f && it.height > 0f }
+    } catch (e: Exception) { emptyList() }
 
     suspend fun analyze(file: File): ImageInfo = withContext(Dispatchers.Default) {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

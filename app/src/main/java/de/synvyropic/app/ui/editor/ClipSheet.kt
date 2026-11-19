@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import de.synvyropic.app.ui.theme.Rgb
 import de.synvyropic.model.ColorGrade
 import de.synvyropic.model.FitMode
+import de.synvyropic.model.SpeedRamp
 import de.synvyropic.model.Transition
 import de.synvyropic.model.TransitionFamily
 import de.synvyropic.model.TransitionType
@@ -94,6 +95,67 @@ fun ClipSheet(index: Int, state: EditorState, vm: EditorViewModel, onDismiss: ()
                     listOf(FitMode.AUTO to "Auto", FitMode.FILL to "Füllen", FitMode.BLUR to "Blur", FitMode.PAN to "Schwenk").forEach { (m, l) ->
                         FilterChip(selected = info.fit == m, onClick = { vm.setFit(clip.imageUri, m) }, label = { Text(l) })
                     }
+                }
+            }
+
+            // ---------------- Video: Ausschnitt & Ton
+            info?.video?.let { v ->
+                HorizontalDivider()
+                Text("Video-Ausschnitt", style = MaterialTheme.typography.labelLarge)
+                var trim by remember(clip.imageUri, v.trimStartMs, v.trimEndMs) {
+                    mutableStateOf(v.trimStartMs.toFloat()..v.trimEnd.toFloat())
+                }
+                androidx.compose.material3.RangeSlider(
+                    value = trim,
+                    onValueChange = { trim = it },
+                    valueRange = 0f..v.durationMs.toFloat().coerceAtLeast(1f),
+                    onValueChangeFinished = {
+                        val a = trim.start.roundToLong()
+                        val b = trim.endInclusive.roundToLong().coerceAtLeast(a + 300)
+                        vm.setTrim(clip.imageUri, a, b)
+                    },
+                )
+                Text(
+                    "${formatMs(trim.start.toLong())} – ${formatMs(trim.endInclusive.toLong())} von ${formatMs(v.durationMs)} · " +
+                        "der Auto-Schnitt gibt dem Video so viele Beats, wie hineinpassen",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (v.hasAudio) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Originalton", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                        androidx.compose.material3.Switch(checked = v.keepAudio, onCheckedChange = { vm.setKeepAudio(clip.imageUri, it) })
+                    }
+                    if (v.keepAudio) {
+                        LabeledSlider("Lautstärke Originalton", v.audioVolume, 0f..1f, { "${(it * 100).toInt()} %" }) {
+                            vm.setVideoVolume(clip.imageUri, it)
+                        }
+                        Text(
+                            if ((info?.ramp ?: SpeedRamp.NONE) == SpeedRamp.NONE) "Die Musik wird währenddessen automatisch leiser."
+                            else "Bei Tempo-Rampen bleibt der Originalton stumm (er klänge verzerrt).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            // ---------------- Tempo-Rampe
+            if (info != null) {
+                HorizontalDivider()
+                Text(if (info.video != null) "Tempo" else "Tempo der Zoom-Fahrt", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        SpeedRamp.NONE to "Normal", SpeedRamp.SLOW_MO to "Zeitlupe", SpeedRamp.FAST to "Zeitraffer",
+                        SpeedRamp.SLOW_TO_FAST to "Langsam → schnell", SpeedRamp.FAST_TO_SLOW to "Schnell → langsam",
+                        SpeedRamp.BEAT_VELOCITY to "Beat-Velocity",
+                    ).forEach { (r, l) ->
+                        FilterChip(selected = info.ramp == r, onClick = { vm.setRamp(clip.imageUri, r) }, label = { Text(l) })
+                    }
+                }
+                if (info.ramp == SpeedRamp.BEAT_VELOCITY) {
+                    Text("Schneller Ruck auf jedem Beat, danach Zeitlupe – der typische Velocity-Edit.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 

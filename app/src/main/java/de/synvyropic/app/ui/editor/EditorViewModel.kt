@@ -165,7 +165,8 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
         if (missing.isEmpty()) { segmentMissing(); return }
         _state.update { it.copy(analyzingFaces = it.analyzingFaces + missing.size) }
         for (path in missing) {
-            val info = runCatching { FaceAnalyzer.analyze(File(path)) }.getOrNull()
+            val f = File(path)
+            val info = runCatching { if (FaceAnalyzer.isVideoFile(f)) FaceAnalyzer.analyzeVideo(f) else FaceAnalyzer.analyze(f) }.getOrNull()
                 ?.let { i -> pendingTakenAt.remove(path)?.let { i.copy(takenAt = it) } ?: i }
             if (info != null) change { it.copy(imageInfo = it.imageInfo + (path to info)) }
             _state.update { it.copy(analyzingFaces = it.analyzingFaces - 1) }
@@ -175,7 +176,7 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
 
     /** Personen auf Fotos mit Gesichtern freistellen (für Parallax / Text hinter Person). */
     private suspend fun segmentMissing() {
-        val todo = project?.let { p -> p.images.filter { p.imageInfo[it]?.let { i -> i.faces.isNotEmpty() && !i.maskTried } == true } }.orEmpty()
+        val todo = project?.let { p -> p.images.filter { p.imageInfo[it]?.let { i -> i.faces.isNotEmpty() && !i.maskTried && i.video == null } == true } }.orEmpty()
         for (path in todo) {
             val mask = runCatching { FaceAnalyzer.segment(File(path), repo.mediaDir(projectId)) }.getOrNull()
             change(recut = false) { p ->
@@ -186,6 +187,23 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
     }
 
     fun setParallax(v: Float) = change(recut = false) { it.copy(parallax = v) }
+
+    // ------------------------------------------------------------ Videos & Tempo
+
+    private fun updateInfo(path: String, f: (de.synvyropic.model.ImageInfo) -> de.synvyropic.model.ImageInfo) {
+        change { p -> p.imageInfo[path]?.let { p.copy(imageInfo = p.imageInfo + (path to f(it))) } ?: p }
+        _state.value.timeline.firstOrNull { it.clip.imageUri == path }?.let { focusClip(it) }
+    }
+
+    fun setRamp(path: String, ramp: de.synvyropic.model.SpeedRamp) = updateInfo(path) { it.copy(ramp = ramp) }
+
+    fun setTrim(path: String, startMs: Long, endMs: Long) = updateInfo(path) { i ->
+        i.copy(video = i.video?.copy(trimStartMs = startMs, trimEndMs = endMs))
+    }
+
+    fun setKeepAudio(path: String, keep: Boolean) = updateInfo(path) { i -> i.copy(video = i.video?.copy(keepAudio = keep)) }
+
+    fun setVideoVolume(path: String, v: Float) = updateInfo(path) { i -> i.copy(video = i.video?.copy(audioVolume = v)) }
 
     /** Darstellungsmodus eines Bildes durchschalten: Auto → Füllen → Blur → Schwenk → Auto. */
     fun cycleFit(path: String) {
@@ -269,13 +287,13 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
             var failed = 0
             for (u in uris) {
                 val taken = importer.takenAt(u)
-                runCatching { importer.importImage(u, dir) }
+                runCatching { if (importer.isVideo(u)) importer.importVideo(u, dir) else importer.importImage(u, dir) }
                     .onSuccess { files += it.absolutePath; taken?.let { t -> pendingTakenAt[it.absolutePath] = t } }
                     .onFailure { failed++ }
                 _state.update { it.copy(importingImages = it.importingImages - 1) }
             }
             change { it.copy(images = it.images + files) }
-            if (failed > 0) _state.update { it.copy(error = "$failed Bild(er) konnten nicht geladen werden") }
+            if (failed > 0) _state.update { it.copy(error = "$failed Datei(en) konnten nicht geladen werden") }
             analyzeMissing()
         }
     }
