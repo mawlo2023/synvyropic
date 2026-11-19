@@ -30,6 +30,8 @@ object ExportManager {
         if (_state.value is ExportState.Running) return
         val app = context.applicationContext
         _state.value = ExportState.Running(project.id, 0f)
+        // Vordergrund-Dienst: Export läuft auch im Hintergrund / bei Bildschirm aus weiter
+        runCatching { app.startForegroundService(android.content.Intent(app, ExportService::class.java)) }
         job = scope.launch {
             _state.value = try {
                 val uri = VideoExporter(app).export(project) { p ->

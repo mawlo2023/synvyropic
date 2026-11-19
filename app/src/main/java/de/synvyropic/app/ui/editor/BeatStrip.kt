@@ -18,16 +18,29 @@ import de.synvyropic.model.BeatGrid
  * Bereich außerhalb des gewählten Ausschnitts wird abgedunkelt.
  */
 @Composable
-fun BeatStrip(grid: BeatGrid, durationMs: Long, rangeStartMs: Long, rangeEndMs: Long, modifier: Modifier = Modifier) {
+fun BeatStrip(
+    grid: BeatGrid, durationMs: Long, rangeStartMs: Long, rangeEndMs: Long,
+    modifier: Modifier = Modifier, waveform: List<Float> = emptyList(),
+) {
     val normal = MaterialTheme.colorScheme.onSurfaceVariant
     val bg = MaterialTheme.colorScheme.surfaceVariant
     val downbeats = grid.downbeatIndices.toHashSet()
     val drops = grid.dropIndices.toHashSet()
-    Canvas(modifier.fillMaxWidth().height(56.dp)) {
+    val waveColor = Rgb.ElectricBlue.copy(alpha = 0.55f)
+    Canvas(modifier.fillMaxWidth().height(72.dp)) {
         drawRect(bg)
         if (durationMs <= 0) return@Canvas
         val w = size.width
         val h = size.height
+        // Wellenform (gespiegelt um die Mitte)
+        if (waveform.isNotEmpty()) {
+            val bar = w / waveform.size
+            val mid = h / 2f
+            waveform.forEachIndexed { i, v ->
+                val a = v * h * 0.45f
+                drawRect(waveColor, Offset(i * bar, mid - a), Size(maxOf(1f, bar * 0.8f), a * 2f))
+            }
+        }
         grid.beatsMs.forEachIndexed { i, ms ->
             val x = ms.toFloat() / durationMs * w
             val strength = grid.strengths.getOrElse(i) { 0.5f }

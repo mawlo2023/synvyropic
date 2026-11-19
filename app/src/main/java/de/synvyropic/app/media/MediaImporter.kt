@@ -56,8 +56,9 @@ class MediaImporter(private val context: Context) {
 
     suspend fun importAudio(uri: Uri, targetDir: File): File = withContext(Dispatchers.IO) {
         val ext = displayName(uri)?.substringAfterLast('.', "")?.takeIf { it.length in 2..5 } ?: "audio"
-        targetDir.listFiles { f -> f.name.startsWith("music.") }?.forEach { it.delete() }
-        val out = File(targetDir, "music.$ext")
+        // Eindeutiger Name: sonst hält die Vorschau neue Musik für die alte (gleicher Pfad)
+        targetDir.listFiles { f -> f.name.startsWith("music") }?.forEach { it.delete() }
+        val out = File(targetDir, "music_${System.currentTimeMillis()}.$ext")
         context.contentResolver.openInputStream(uri).use { input ->
             requireNotNull(input) { "Datei kann nicht geöffnet werden" }
             out.outputStream().use { input.copyTo(it) }

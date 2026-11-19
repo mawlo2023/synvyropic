@@ -116,6 +116,23 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
         vm.focus.collect { f -> preview.playLoop(f.startMs, f.endMs) }
     }
     var selectedClip by remember { mutableStateOf<Int?>(null) }
+    var showExport by remember { mutableStateOf(false) }
+    val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    if (showExport) state.project?.let { p ->
+        ExportSheet(
+            project = p,
+            onExport = { settings ->
+                showExport = false
+                vm.setExportSettings(settings)
+                // Für die Fortschritts-Benachrichtigung (Android 13+); Export läuft auch ohne
+                if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) notifyPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                ExportManager.start(context, p.copy(export = settings))
+            },
+            onDismiss = { showExport = false },
+        )
+    }
     selectedClip?.let { idx ->
         if (idx < state.timeline.size) {
             ClipSheet(index = idx, state = state, vm = vm, onDismiss = { selectedClip = null; preview.pause() })
@@ -147,7 +164,7 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
                     val p = state.project
                     if (p != null && p.clips.isNotEmpty()) {
                         Button(
-                            onClick = { preview.pause(); ExportManager.start(context, p) },
+                            onClick = { preview.pause(); showExport = true },
                             enabled = state.analysisProgress == null && state.importingImages == 0,
                             modifier = Modifier.padding(end = 8.dp),
                         ) {
@@ -377,10 +394,10 @@ private fun MusicSection(project: Project, state: EditorState, vm: EditorViewMod
                 style = MaterialTheme.typography.labelLarge,
                 color = Rgb.Green,
             )
-            var range by remember(music.uri, dur) {
+            var range by remember(music.uri, dur, music.startMs, music.endMs) {
                 mutableStateOf(music.startMs.toFloat()..(music.endMs ?: dur).toFloat().coerceAtMost(dur.toFloat()))
             }
-            BeatStrip(grid, dur, range.start.toLong(), range.endInclusive.toLong(), Modifier.clip(RoundedCornerShape(8.dp)))
+            BeatStrip(grid, dur, range.start.toLong(), range.endInclusive.toLong(), Modifier.clip(RoundedCornerShape(8.dp)), music.waveform)
             if (dur > 0) {
                 RangeSlider(
                     value = range,
@@ -388,8 +405,18 @@ private fun MusicSection(project: Project, state: EditorState, vm: EditorViewMod
                     valueRange = 0f..dur.toFloat(),
                     onValueChangeFinished = { vm.setMusicRange(range.start.roundToLong(), range.endInclusive.roundToLong()) },
                 )
+                // Feinschnitt: beatweise verschieben
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { vm.nudgeStart(-1) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Start einen Beat früher") }
+                    Text("Start ${formatMs(music.startMs)}", style = MaterialTheme.typography.bodySmall)
+                    IconButton(onClick = { vm.nudgeStart(1) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Start einen Beat später") }
+                    Spacer(Modifier.weight(1f))
+                    IconButton(onClick = { vm.nudgeEnd(-1) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Ende einen Beat früher") }
+                    Text("Ende ${formatMs(music.endMs ?: dur)}", style = MaterialTheme.typography.bodySmall)
+                    IconButton(onClick = { vm.nudgeEnd(1) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Ende einen Beat später") }
+                }
                 Text(
-                    "Ausschnitt: ${formatMs(range.start.toLong())} – ${formatMs(range.endInclusive.toLong())}",
+                    "Pfeile verschieben Start/Ende um genau einen Beat.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

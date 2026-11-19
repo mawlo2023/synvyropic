@@ -3,7 +3,7 @@
 > Android-App, die aus Einzelbildern und Musik automatisch beat-synchrone Reels und Slideshows
 > mit professionellen GPU-Übergängen erzeugt.
 >
-> Status: **v0.8 – M3 fertig, M4 (Text & Branding) in Arbeit** – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
+> Status: **v0.9 – M4 fertig, M5 (Feinschliff) in Arbeit** – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
 
 ---
 
@@ -156,8 +156,8 @@ Ein Stil ist eine Regelmenge: Schnittraster, Übergangspool (gewichtet), Effekt 
 | **M1c – Gesichter & Videos** ✅ | Gesichtserkennung mit Füllen/Blur/Schwenk pro Bild, Videoliste | Niemand wird abgeschnitten |
 | **M2 – Effekt-Engine** ✅ | Live-Auto-Schnitt bei jeder Änderung, Vorschau spielt geänderte Stelle in Schleife, Clip-Fenster (Übergang nach Familie, Dauer in Beats, Intensität, Beat-Kopplung, Farbe, Richtung, Bildmodus), Handauswahl übersteht Neuberechnung, Easing für fortschreitende Übergänge, Versionsanzeige | Profi-Übergänge |
 | **M3 – Farbe** ✅ | Looks, Projekt-Regler, LUT-Import, Korrektur pro Bild, sofortige Vorschau | Color Grading wie in Profi-Apps |
-| **M4 – Text & Branding** | Feinschliff-Editor pro Clip, Text-Overlays, Wasserzeichen, Intro/Outro, Projektverwaltung, Stil-Presets | Vollständiger MVP |
-| **M5 – Feinschliff** | 4K, HEVC, 60 fps, Performance, Musik-Wellenform-Editor | Version 1.0 |
+| **M4 – Text & Branding** ✅ | Feinschliff-Editor pro Clip, Text-Overlays, Wasserzeichen, Intro/Outro, Projektverwaltung, Stil-Presets | Vollständiger MVP |
+| **M5 – Feinschliff** | Export-Fenster (1080p/4K, 30/60 fps, H.264/HEVC, Geräteprüfung, Größenschätzung), Export als Vordergrund-Dienst mit Benachrichtigung, Musik-Wellenform, beatweiser Feinschnitt, ruhigere Vorschau bei Eingaben | Version 1.0 |
 
 ## 7. Qualitätsziele
 - Vorschau flüssig (≥ 30 fps) bei 1080p auf dem OnePlus 8 Pro.
@@ -178,6 +178,7 @@ Videoclips als Quelle · Sticker/Overlays · Velocity/Speed-Ramps · Templates t
 | Bildquellen | System-Fotoauswahl (zeigt Google-Fotos-Cloudbilder mit an) + Button „Google Fotos“, der die Fotos-App direkt öffnet. Bilder werden ins Projekt kopiert (max. 3840 px). Kein Login/keine Google-API nötig. |
 | Vorschau | Fest oben im Editor, mit Scrubbing; Klick auf Clip springt dorthin. Rendert in halber Exportauflösung. |
 | Export-Standard | 1080p, 30 fps, H.264 ~16 Mbit/s, AAC 192 kbit/s. Übergänge sind auf den Schnitt-Beat zentriert. |
+| Vorschau bei Bearbeitung | Betroffene Stelle wird **einmal** abgespielt (keine Schleife); bei Eingaben erst nach ~0,7 s Ruhe; gleiche Stelle startet nicht neu. |
 | Live-Bearbeitung | Kein „Auto-Schnitt erstellen“-Knopf mehr: jede Änderung schneidet sofort neu; die Vorschau springt zur betroffenen Stelle. |
 | Versionsanzeige | „Version 0.2.<Build>“ unter „Meine Projekte“ |
 | Ausrichtung | Hoch- und Querformat; im Querformat zweispaltiges Layout (Einstellungen links, Timeline rechts) |

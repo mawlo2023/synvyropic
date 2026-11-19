@@ -12,6 +12,7 @@ import de.synvyropic.model.FitMode
 import de.synvyropic.model.Framing
 import de.synvyropic.app.media.MediaImporter
 import de.synvyropic.audio.BeatDetector
+import de.synvyropic.audio.Waveform
 import de.synvyropic.model.AspectFormat
 import de.synvyropic.model.AutoCut
 import de.synvyropic.model.LengthMode
@@ -68,6 +69,25 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
 
     private val _focus = MutableSharedFlow<PreviewFocus>(extraBufferCapacity = 4)
     val focus: SharedFlow<PreviewFocus> = _focus.asSharedFlow()
+    private var focusJob: Job? = null
+
+    /**
+     * Vorschau nach einer Bearbeitung auf die betroffene Stelle setzen – erst, wenn ~0,7 s
+     * nichts mehr geändert wurde (Tippen, Schieberegler), damit die Wiedergabe nicht flackert.
+     */
+    private fun focusAfterEdit(f: PreviewFocus) {
+        focusJob?.cancel()
+        focusJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(700)
+            _focus.emit(f)
+        }
+    }
+
+    /** Sofort springen (Clip antippen, „Stelle erneut abspielen“). */
+    private fun focusNow(f: PreviewFocus) {
+        focusJob?.cancel()
+        _focus.tryEmit(f)
+    }
 
     init {
         viewModelScope.launch {
@@ -79,6 +99,15 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
                     musicTitle = p.music?.let { m -> importer.audioTitle(File(m.uri)) ?: File(m.uri).name },
                     musicDurationMs = p.music?.let { m -> importer.audioDurationMs(File(m.uri)) } ?: 0,
                 )
+            }
+            // Musik aus älteren Versionen: Wellenform nachträglich berechnen
+            p.music?.takeIf { it.waveform.isEmpty() }?.let { m ->
+                launch {
+                    runCatching { AudioDecoder.decodeMono(File(m.uri)) }.getOrNull()?.let { pcm ->
+                        val wave = Waveform.peaks(pcm.samples)
+                        change(recut = false) { it.copy(music = it.music?.copy(waveform = wave)) }
+                    }
+                }
             }
             // Bilder aus älteren Versionen ohne Gesichtsanalyse nachträglich analysieren
             analyzeMissing()
@@ -126,7 +155,7 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
             val o = if (transition == null) p.transitionOverrides - index else p.transitionOverrides + (index to transition)
             p.copy(transitionOverrides = o)
         }
-        focusCut(index)
+        cutFocus(index)?.let(::focusAfterEdit)
     }
 
     fun isTransitionManual(index: Int) = project?.transitionOverrides?.containsKey(index) == true
@@ -135,13 +164,15 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
     fun beatMs(): Float = project?.music?.beats?.bpm?.takeIf { it > 0f }?.let { 60000f / it } ?: 500f
 
     /** Vorschau auf die Schnittstelle vor Clip [index] setzen (Schleife ±1,2 s). */
-    fun focusCut(index: Int) {
-        val t = _state.value.timeline.getOrNull(index) ?: return
-        _focus.tryEmit(PreviewFocus((t.startMs - 1200).coerceAtLeast(0), t.startMs + 1200))
+    fun focusCut(index: Int) { cutFocus(index)?.let(::focusNow) }
+
+    private fun cutFocus(index: Int): PreviewFocus? {
+        val t = _state.value.timeline.getOrNull(index) ?: return null
+        return PreviewFocus((t.startMs - 1200).coerceAtLeast(0), t.startMs + 1200)
     }
 
     private fun focusClip(t: TimedClip) {
-        _focus.tryEmit(PreviewFocus((t.startMs - 300).coerceAtLeast(0), t.endMs + 300))
+        focusAfterEdit(PreviewFocus((t.startMs - 300).coerceAtLeast(0), t.endMs + 300))
     }
 
     /** Tatsächlich verwendeter Modus (AUTO aufgelöst) für die Anzeige. */
@@ -215,7 +246,8 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
                 val grid = BeatDetector().analyze(pcm.samples, pcm.sampleRate) { p ->
                     _state.update { it.copy(analysisProgress = 0.5f + p * 0.5f) }
                 }
-                change { it.copy(music = MusicTrack(uri = file.absolutePath, endMs = duration.takeIf { d -> d > 0 }, beats = grid)) }
+                val wave = Waveform.peaks(pcm.samples)
+                change { it.copy(music = MusicTrack(uri = file.absolutePath, endMs = duration.takeIf { d -> d > 0 }, beats = grid, waveform = wave)) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -228,6 +260,26 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
 
     fun setMusicRange(startMs: Long, endMs: Long) = change { p ->
         p.copy(music = p.music?.copy(startMs = startMs, endMs = endMs))
+    }
+
+    /** Start des Ausschnitts um einen Beat verschieben (dir = -1 / +1). Startet immer auf einem Beat. */
+    fun nudgeStart(dir: Int) = change { p ->
+        val m = p.music ?: return@change p
+        val beats = m.beats?.beatsMs ?: return@change p
+        val cur = beats.indexOfFirst { it >= m.startMs }.let { if (it < 0) beats.lastIndex else it }
+        val idx = (cur + dir).coerceIn(0, beats.lastIndex)
+        val end = m.endMs ?: Long.MAX_VALUE
+        if (beats[idx] >= end) p else p.copy(music = m.copy(startMs = beats[idx]))
+    }
+
+    /** Ende des Ausschnitts um einen Beat verschieben. */
+    fun nudgeEnd(dir: Int) = change { p ->
+        val m = p.music ?: return@change p
+        val beats = m.beats?.beatsMs ?: return@change p
+        val end = m.endMs ?: (beats.lastOrNull() ?: return@change p)
+        val cur = beats.indexOfLast { it <= end }.coerceAtLeast(0)
+        val idx = (cur + dir).coerceIn(0, beats.lastIndex)
+        if (beats[idx] <= m.startMs) p else p.copy(music = m.copy(endMs = beats[idx]))
     }
 
     fun setFades(fadeInMs: Long, fadeOutMs: Long) = change(recut = false) { p ->
@@ -286,12 +338,12 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
 
     fun setIntro(card: TitleCard?) {
         change(recut = false) { it.copy(intro = card) }
-        card?.let { _focus.tryEmit(PreviewFocus(0, it.durationMs.coerceAtMost(duration))) }
+        card?.let { focusAfterEdit(PreviewFocus(0, it.durationMs.coerceAtMost(duration))) }
     }
 
     fun setOutro(card: TitleCard?) {
         change(recut = false) { it.copy(outro = card) }
-        card?.let { _focus.tryEmit(PreviewFocus((duration - it.durationMs - 300).coerceAtLeast(0), duration)) }
+        card?.let { focusAfterEdit(PreviewFocus((duration - it.durationMs - 300).coerceAtLeast(0), duration)) }
     }
 
     fun setCaption(path: String, text: String) = change(recut = false) { p ->
@@ -312,14 +364,14 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
         val start = atMs.coerceIn(0, (duration - 500).coerceAtLeast(0))
         val end = (start + 2500).coerceAtMost(duration.coerceAtLeast(start + 500))
         change(recut = false) { it.copy(texts = it.texts + TextOverlay(id, "Dein Text", start, end)) }
-        _focus.tryEmit(PreviewFocus(start, end))
+        focusAfterEdit(PreviewFocus(start, end))
         return id
     }
 
     fun updateText(id: String, f: (TextOverlay) -> TextOverlay) {
         var updated: TextOverlay? = null
         change(recut = false) { p -> p.copy(texts = p.texts.map { if (it.id == id) f(it).also { n -> updated = n } else it }) }
-        updated?.let { _focus.tryEmit(PreviewFocus(it.startMs, it.endMs)) }
+        updated?.let { focusAfterEdit(PreviewFocus(it.startMs, it.endMs)) }
     }
 
     fun removeText(id: String) = change(recut = false) { p -> p.copy(texts = p.texts.filterNot { it.id == id }) }
@@ -355,6 +407,7 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
     }
     fun setBeatsPerCut(n: Int) = change { it.copy(beatsPerCut = n) }
     fun setLengthMode(m: LengthMode) = change { it.copy(lengthMode = m) }
+    fun setExportSettings(e: de.synvyropic.model.ExportSettings) = change(recut = false) { it.copy(export = e) }
 
     // ------------------------------------------------------------ Auto-Schnitt
 

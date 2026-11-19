@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.net.Uri
@@ -85,8 +86,7 @@ class VideoExporter(private val context: Context) {
         muxer: MediaMuxer, audio: EncodedAudio?, onProgress: (Float) -> Unit,
     ) {
         val mime = if (project.export.codec == VideoCodec.HEVC) MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
-        val pixels = w.toLong() * h
-        val bitrate = (pixels * fps * 0.25).toInt().coerceIn(8_000_000, 80_000_000) // ~16 Mbit/s bei 1080p30
+        val bitrate = bitrate(w, h, fps, project.export.codec)
         val format = MediaFormat.createVideoFormat(mime, w, h).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
@@ -165,6 +165,32 @@ class VideoExporter(private val context: Context) {
     }
 
     companion object {
+        /** ~16 Mbit/s bei 1080p30 (H.264); HEVC braucht für gleiche Qualität ~40 % weniger. */
+        fun bitrate(w: Int, h: Int, fps: Int, codec: VideoCodec): Int {
+            val base = (w.toLong() * h * fps * 0.25).toInt().coerceIn(8_000_000, 80_000_000)
+            return if (codec == VideoCodec.HEVC) (base * 0.6).toInt() else base
+        }
+
+        fun mime(codec: VideoCodec) = if (codec == VideoCodec.HEVC) MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
+
+        /** Kann ein Hardware-/Software-Encoder dieses Formats auf dem Gerät? */
+        fun isSupported(codec: VideoCodec, w: Int, h: Int, fps: Int): Boolean {
+            val mime = mime(codec)
+            return MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
+                info.isEncoder && info.supportedTypes.any { it.equals(mime, ignoreCase = true) } && runCatching {
+                    val caps = info.getCapabilitiesForType(mime).videoCapabilities
+                    caps.areSizeAndRateSupported(w, h, fps.toDouble()) || caps.areSizeAndRateSupported(h, w, fps.toDouble())
+                }.getOrDefault(false)
+            }
+        }
+
+        /** Geschätzte Dateigröße in Bytes. */
+        fun estimateBytes(settings: de.synvyropic.model.ExportSettings, format: de.synvyropic.model.AspectFormat, durationMs: Long): Long {
+            val (w, h) = format.size(settings.resolution)
+            val bits = bitrate(w, h, settings.fps, settings.codec).toLong() + 192_000
+            return bits / 8 * durationMs / 1000
+        }
+
         fun describe(project: Project): String {
             val (w, h) = project.format.size(project.export.resolution)
             val res = if (project.export.resolution == Resolution.UHD_4K) "4K" else "1080p"

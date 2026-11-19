@@ -78,6 +78,8 @@ data class MusicTrack(
     val fadeInMs: Long = 0,
     val fadeOutMs: Long = 1500,
     val beats: BeatGrid? = null,
+    /** Wellenform zur Anzeige (0..1, ca. 1200 Werte über die ganze Datei). */
+    val waveform: List<Float> = emptyList(),
 )
 
 /** Ergebnis der Beat-Analyse. strengths[i] in 0..1 gehört zu beatsMs[i]. */

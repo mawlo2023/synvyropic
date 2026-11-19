@@ -61,12 +61,12 @@ jobs:
       - name: APK umbenennen
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/release/app-release.apk "out/Synvyropic-0.2.${VERSION_CODE}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "out/Synvyropic-0.3.${VERSION_CODE}.apk"
 
       - name: APK als Artefakt hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: Synvyropic-0.2.${{ github.run_number }}
+          name: Synvyropic-0.3.${{ github.run_number }}
           path: out/*.apk
 
       # Direkter Download aufs Handy: Release "latest-<branch>" wird bei jedem Push aktualisiert.

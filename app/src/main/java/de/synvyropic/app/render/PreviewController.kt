@@ -73,16 +73,20 @@ class PreviewController(context: Context) {
         if (old == null || basePos > _duration.value) seekTo(0) else view.requestRender()
     }
 
-    // Schleifenbereich (z. B. beim Bearbeiten eines Übergangs); -1 = keine Schleife
+    // Abspielbereich (z. B. beim Bearbeiten eines Übergangs): wird einmal gespielt, dann Pause; -1 = keiner
     private var loopStart = -1L
     private var loopEnd = -1L
 
     fun toggle() = if (isPlaying) pause() else play()
 
-    /** Bereich in Schleife abspielen, bis der Nutzer pausiert, spult oder Play drückt. */
+    /**
+     * Bereich einmal abspielen und am Ende anhalten. Läuft genau dieser Bereich bereits,
+     * passiert nichts – so springt die Vorschau bei schnellen Änderungen nicht ständig zurück.
+     */
     fun playLoop(startMs: Long, endMs: Long) {
         val end = endMs.coerceAtMost(_duration.value)
         if (end <= startMs) return
+        if (isPlaying && startMs == loopStart && end == loopEnd) return
         loopStart = startMs
         loopEnd = end
         seekInternal(startMs)
@@ -162,8 +166,10 @@ class PreviewController(context: Context) {
             if (!isPlaying) return
             val t = currentTime()
             if (loopEnd > 0 && t >= loopEnd) {
-                seekInternal(loopStart)
-                main.postDelayed(this, 40)
+                // Bereich fertig: am Ende stehen bleiben
+                val end = loopEnd
+                pause()
+                seekInternal(end - 1)
                 return
             }
             if (t >= _duration.value) {

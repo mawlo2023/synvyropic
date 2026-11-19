@@ -4,6 +4,10 @@
     <!-- Bilder/Musik: Fotoauswahl und Dateiauswahl gewähren Zugriff pro Datei.
          Videos lesen: nur für „Meine Videos“, um Exporte früherer Installationen anzuzeigen. -->
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- Export im Hintergrund mit Fortschritt in der Benachrichtigung -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Prüfen, ob Google Fotos installiert ist (Paket-Sichtbarkeit ab Android 11). -->
     <queries>
@@ -28,5 +32,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".export.ExportService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>
