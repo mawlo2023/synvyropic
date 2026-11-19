@@ -3,7 +3,7 @@
 > Android-App, die aus Einzelbildern und Musik automatisch beat-synchrone Reels und Slideshows
 > mit professionellen GPU-Übergängen erzeugt.
 >
-> Status: **v0.9 – M4 fertig, M5 (Feinschliff) in Arbeit** – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
+> Status: **Version 1.0 veröffentlicht** – Erweiterungen in Planung – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
 
 ---
 
@@ -157,7 +157,7 @@ Ein Stil ist eine Regelmenge: Schnittraster, Übergangspool (gewichtet), Effekt 
 | **M2 – Effekt-Engine** ✅ | Live-Auto-Schnitt bei jeder Änderung, Vorschau spielt geänderte Stelle in Schleife, Clip-Fenster (Übergang nach Familie, Dauer in Beats, Intensität, Beat-Kopplung, Farbe, Richtung, Bildmodus), Handauswahl übersteht Neuberechnung, Easing für fortschreitende Übergänge, Versionsanzeige | Profi-Übergänge |
 | **M3 – Farbe** ✅ | Looks, Projekt-Regler, LUT-Import, Korrektur pro Bild, sofortige Vorschau | Color Grading wie in Profi-Apps |
 | **M4 – Text & Branding** ✅ | Feinschliff-Editor pro Clip, Text-Overlays, Wasserzeichen, Intro/Outro, Projektverwaltung, Stil-Presets | Vollständiger MVP |
-| **M5 – Feinschliff** | Export-Fenster (1080p/4K, 30/60 fps, H.264/HEVC, Geräteprüfung, Größenschätzung), Export als Vordergrund-Dienst mit Benachrichtigung, Musik-Wellenform, beatweiser Feinschnitt, ruhigere Vorschau bei Eingaben | Version 1.0 |
+| **M5 – Feinschliff** ✅ | Export-Fenster (1080p/4K, 30/60 fps, H.264/HEVC, Geräteprüfung, Größenschätzung), Export als Vordergrund-Dienst mit Benachrichtigung, Musik-Wellenform, beatweiser Feinschnitt, ruhigere Vorschau bei Eingaben | Version 1.0 |
 
 ## 7. Qualitätsziele
 - Vorschau flüssig (≥ 30 fps) bei 1080p auf dem OnePlus 8 Pro.

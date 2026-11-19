@@ -3,6 +3,7 @@ name: APK bauen
 on:
   push:
     branches: ["**"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -14,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERSION_CODE: ${{ github.run_number }}
+      # Bei Versions-Tags (v1.0.0) wird die Versionsnummer aus dem Tag übernommen
+      VERSION_NAME: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -61,17 +64,18 @@ jobs:
       - name: APK umbenennen
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/release/app-release.apk "out/Synvyropic-0.3.${VERSION_CODE}.apk"
+          if [ -n "$VERSION_NAME" ]; then NAME="${VERSION_NAME#v}"; else NAME="1.0.${VERSION_CODE}"; fi
+          cp app/build/outputs/apk/release/app-release.apk "out/Synvyropic-${NAME}.apk"
 
       - name: APK als Artefakt hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: Synvyropic-0.3.${{ github.run_number }}
+          name: Synvyropic-${{ github.ref_name }}-${{ github.run_number }}
           path: out/*.apk
 
       # Direkter Download aufs Handy: Release "latest-<branch>" wird bei jedem Push aktualisiert.
       - name: Download-Release aktualisieren
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-${{ github.ref_name }}
@@ -82,3 +86,17 @@ jobs:
           body: |
             Automatischer Build #${{ github.run_number }} von `${{ github.ref_name }}` (Commit ${{ github.sha }}).
             APK auf dem Handy herunterladen und installieren.
+
+      # Versions-Tag (v1.0.0) → dauerhaftes, offizielles Release
+      - name: Versions-Release anlegen
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Synvyropic ${{ github.ref_name }}"
+          prerelease: false
+          make_latest: true
+          files: out/*.apk
+          body: |
+            Offizielle Version ${{ github.ref_name }} von Synvyropic.
+            APK auf dem Handy herunterladen und installieren (Updates lassen sich drüberinstallieren).
