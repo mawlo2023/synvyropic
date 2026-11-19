@@ -61,7 +61,7 @@ object AutoCut {
                     durationMsFallback = 2000,
                     motion = kenBurns(i, style.kenBurnsStrength, rnd),
                     transitionIn = if (i == 0) Transition(TransitionType.CUT, 0)
-                                   else transition(pick(style.transitions, rnd), 500, style),
+                                   else transition(pick(style.transitions, rnd), 500, style, rnd = rnd),
                     effect = style.clipEffect?.let { ClipEffect(it) },
                 )
             }
@@ -89,9 +89,9 @@ object AutoCut {
             val beatIdx = firstIdx + i * beatsPerCut
             val trans = when {
                 i == 0 -> Transition(TransitionType.CUT, 0)
-                beatIdx in drops -> transition(style.dropTransition, (beatMs * 1.5f).roundToLong(), style, 1f)
-                beatIdx in downbeats -> transition(pick(style.downbeatTransitions, rnd), (beatMs * style.transitionBeatFraction).roundToLong(), style)
-                else -> transition(pick(style.transitions, rnd), (beatMs * style.transitionBeatFraction).roundToLong(), style)
+                beatIdx in drops -> transition(style.dropTransition, (beatMs * 1.5f).roundToLong(), style, 1f, rnd)
+                beatIdx in downbeats -> transition(pick(style.downbeatTransitions, rnd), (beatMs * style.transitionBeatFraction).roundToLong(), style, rnd = rnd)
+                else -> transition(pick(style.transitions, rnd), (beatMs * style.transitionBeatFraction).roundToLong(), style, rnd = rnd)
             }
             Clip(
                 id = "$idPrefix$i",
@@ -106,13 +106,18 @@ object AutoCut {
         return Result(clips, startMs)
     }
 
-    private fun transition(type: TransitionType, durationMs: Long, style: Style, intensity: Float = 0.8f) =
+    /** RGB-Akzentfarben für Farb-Flashes. */
+    private val flashColors = longArrayOf(0xFFFF2D55, 0xFF2DFFB4, 0xFF2D7DFF, 0xFFFFD60A, 0xFFB44DFF)
+
+    private fun transition(type: TransitionType, durationMs: Long, style: Style, intensity: Float = 0.8f, rnd: Random = Random(type.ordinal)) =
         Transition(
             type = type,
             durationMs = if (type == TransitionType.CUT) 0 else durationMs.coerceIn(120, 1500),
             intensity = intensity,
             easing = if (style.beatReactive) Easing.EXPO_OUT else Easing.EASE_IN_OUT,
             beatReactive = style.beatReactive,
+            angleDeg = if (type == TransitionType.LINE_WIPE || type == TransitionType.ZIGZAG_WIPE) 45f * rnd.nextInt(8) else 0f,
+            colorArgb = if (type == TransitionType.COLOR_FLASH) flashColors[rnd.nextInt(flashColors.size)] else 0xFFFFFFFF,
         )
 
     private fun <T> pick(weighted: List<Pair<T, Int>>, rnd: Random): T {

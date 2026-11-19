@@ -3,7 +3,7 @@
 > Android-App, die aus Einzelbildern und Musik automatisch beat-synchrone Reels und Slideshows
 > mit professionellen GPU-Übergängen erzeugt.
 >
-> Status: **v0.3 – M0 fertig, M1a in Arbeit** – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
+> Status: **v0.4 – M0 + M1a fertig, M1b in Arbeit** – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
 
 ---
 
@@ -137,8 +137,8 @@ Ein Stil ist eine Regelmenge: Schnittraster, Übergangspool (gewichtet), Effekt 
 |---|---|---|
 | **M0 – Fundament** | Gradle-Projekt, Module, Compose-Gerüst, GitHub-Actions-Build | Installierbare APK mit leerer Oberfläche |
 | **M1a – Medien & Beats** ✅ | Bild-/Musikauswahl (inkl. Google Fotos), Beat-Analyse mit Visualisierung, Auto-Schnitt mit 4 Stilen, Projekte speichern | Timeline steht |
-| **M1b – Vorschau & Export** | GL-Vorschau, Export 1080p, Crossfade + Ken Burns, Musik-Fades | **Erstes echtes beat-synchrones Video** |
-| **M2 – Effekt-Engine** | Shader-Framework, RGB/Glitch-Familie, Bewegung/Zoom-Familie, beat-reaktive Parameter | Profi-Übergänge |
+| **M1b – Vorschau & Export** | GL-Vorschau oben im Editor (Play/Pause/Spulen, Clip antippen = springen), Export 1080p30 nach Filme/Synvyropic, Ken Burns, Musik-Fades, **alle 28 Übergänge als erster Wurf**, Beat-Effekte (Puls, RGB-Puls, VHS) | **Erstes echtes beat-synchrones Video** |
+| **M2 – Effekt-Engine** | Feinschliff der Übergänge (Qualität, Easing, Parameter je Übergang), Übergangs-Auswahl im Editor | Profi-Übergänge |
 | **M3 – Licht & Farbe** | Licht/Flash, Formen/Wipes, Farb-Presets, LUT-Import | Komplette Effektpalette |
 | **M4 – Editor & Text** | Feinschliff-Editor pro Clip, Text-Overlays, Wasserzeichen, Intro/Outro, Projektverwaltung, Stil-Presets | Vollständiger MVP |
 | **M5 – Feinschliff** | 4K, HEVC, 60 fps, Performance, Musik-Wellenform-Editor | Version 1.0 |
@@ -160,6 +160,8 @@ Videoclips als Quelle · Sticker/Overlays · Velocity/Speed-Ramps · Templates t
 | Mindest-Android | API 33 (Android 13) |
 | Branding | Eigenes Wasserzeichen + Intro/Outro-Karte (beides optional pro Projekt) |
 | Bildquellen | System-Fotoauswahl (zeigt Google-Fotos-Cloudbilder mit an) + Button „Google Fotos“, der die Fotos-App direkt öffnet. Bilder werden ins Projekt kopiert (max. 3840 px). Kein Login/keine Google-API nötig. |
+| Vorschau | Fest oben im Editor, mit Scrubbing; Klick auf Clip springt dorthin. Rendert in halber Exportauflösung. |
+| Export-Standard | 1080p, 30 fps, H.264 ~16 Mbit/s, AAC 192 kbit/s. Übergänge sind auf den Schnitt-Beat zentriert. |
 | Ausrichtung | Hoch- und Querformat; im Querformat zweispaltiges Layout (Einstellungen links, Timeline rechts) |
 
 ## 10. Offene Fragen

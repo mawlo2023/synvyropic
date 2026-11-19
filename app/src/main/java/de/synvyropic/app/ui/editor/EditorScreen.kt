@@ -8,6 +8,11 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.ui.platform.LocalContext
+import de.synvyropic.app.export.ExportManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -95,6 +100,15 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
         state.error?.let { snackbar.showSnackbar(it); vm.dismissError() }
     }
 
+    val context = LocalContext.current
+    val preview = rememberPreviewController()
+    val previewError by preview.error.collectAsState()
+    LaunchedEffect(previewError) { previewError?.let { snackbar.showSnackbar(it) } }
+    // Vorschau bekommt jede neue Timeline
+    LaunchedEffect(state.project?.clips, state.project?.music, state.project?.format) {
+        state.project?.takeIf { it.clips.isNotEmpty() }?.let(preview::setProject)
+    }
+
     val pickPhotos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) {
         vm.addImages(it)
     }
@@ -110,6 +124,18 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") }
                 },
+                actions = {
+                    val p = state.project
+                    if (p != null && p.clips.isNotEmpty()) {
+                        Button(
+                            onClick = { preview.pause(); ExportManager.start(context, p) },
+                            enabled = !state.timelineDirty,
+                            modifier = Modifier.padding(end = 8.dp),
+                        ) {
+                            Icon(Icons.Filled.Movie, null); Spacer(Modifier.width(6.dp)); Text("Export")
+                        }
+                    }
+                },
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -120,21 +146,30 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
             pickGooglePhotos = { pickFromApp.launch(Unit) },
             pickMusic = { pickMusic.launch(arrayOf("audio/*")) },
         )
+        ExportDialog(project.id)
+        val hasPreview = project.clips.isNotEmpty()
+        val seek: (Long) -> Unit = { preview.seekTo(it) }
         BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
-            if (maxWidth > 760.dp) {
-                // Querformat / Tablet: Einstellungen links, Timeline rechts
+            if (maxWidth > maxHeight) {
+                // Querformat: Einstellungen links, Vorschau + Timeline rechts
                 Row(Modifier.fillMaxSize()) {
                     LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         settingsSections(project, state, vm, actions)
                     }
-                    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        timelineSection(state)
+                    Column(Modifier.weight(1f)) {
+                        if (hasPreview) PreviewPane(preview, project, Modifier.fillMaxWidth().fillMaxHeight(0.55f).padding(top = 8.dp))
+                        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            timelineSection(state, seek)
+                        }
                     }
                 }
             } else {
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    settingsSections(project, state, vm, actions)
-                    timelineSection(state)
+                Column(Modifier.fillMaxSize()) {
+                    if (hasPreview) PreviewPane(preview, project, Modifier.fillMaxWidth().height(maxHeight * 0.42f).padding(top = 8.dp))
+                    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        settingsSections(project, state, vm, actions)
+                        timelineSection(state, seek)
+                    }
                 }
             }
         }
@@ -400,7 +435,7 @@ private fun CutButton(project: Project, state: EditorState, vm: EditorViewModel)
     }
 }
 
-private fun LazyListScope.timelineSection(state: EditorState) {
+private fun LazyListScope.timelineSection(state: EditorState, onClipClick: (Long) -> Unit) {
     if (state.timeline.isEmpty()) return
     item { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -419,14 +454,15 @@ private fun LazyListScope.timelineSection(state: EditorState) {
             )
         }
         Text(
-            "Vorschau & Export folgen in Ausbaustufe M1b.",
+            "Tippe auf einen Clip, um in der Vorschau dorthin zu springen.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     } }
     itemsIndexed(state.timeline, key = { _, t -> t.clip.id }) { i, t ->
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface).padding(8.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface)
+                .clickable { onClipClick(t.startMs) }.padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AsyncImage(
