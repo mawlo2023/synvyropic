@@ -6,6 +6,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Offizielle Version veröffentlichen (z. B. 1.0.0) – leer lassen für normalen Build"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -16,7 +21,7 @@ jobs:
     env:
       VERSION_CODE: ${{ github.run_number }}
       # Bei Versions-Tags (v1.0.0) wird die Versionsnummer aus dem Tag übernommen
-      VERSION_NAME: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+      VERSION_NAME: ${{ inputs.release_version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -87,16 +92,17 @@ jobs:
             Automatischer Build #${{ github.run_number }} von `${{ github.ref_name }}` (Commit ${{ github.sha }}).
             APK auf dem Handy herunterladen und installieren.
 
-      # Versions-Tag (v1.0.0) → dauerhaftes, offizielles Release
+      # Versions-Tag (v1.0.0) oder manueller Start mit Version → dauerhaftes, offizielles Release
       - name: Versions-Release anlegen
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_version != ''
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "Synvyropic ${{ github.ref_name }}"
+          tag_name: ${{ inputs.release_version != '' && format('v{0}', inputs.release_version) || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: "Synvyropic ${{ inputs.release_version != '' && format('v{0}', inputs.release_version) || github.ref_name }}"
           prerelease: false
           make_latest: true
           files: out/*.apk
           body: |
-            Offizielle Version ${{ github.ref_name }} von Synvyropic.
+            Offizielle Version von Synvyropic.
             APK auf dem Handy herunterladen und installieren (Updates lassen sich drüberinstallieren).
