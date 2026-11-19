@@ -10,6 +10,7 @@ import de.synvyropic.app.media.AudioDecoder
 import de.synvyropic.app.media.FaceAnalyzer
 import de.synvyropic.model.FitMode
 import de.synvyropic.model.Framing
+import de.synvyropic.model.ImageRanking
 import de.synvyropic.app.media.MediaImporter
 import de.synvyropic.audio.BeatDetector
 import de.synvyropic.audio.Waveform
@@ -114,12 +115,35 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
         }
     }
 
+    /** Aufnahmezeiten frisch importierter Bilder, bis ihre Analyse fertig ist. */
+    private val pendingTakenAt = HashMap<String, Long>()
+
+    // ------------------------------------------------------------ Intelligente Reihenfolge
+
+    fun sortByDate() = change { it.copy(images = ImageRanking.byDate(it.images, it.imageInfo)) }
+
+    fun setBestOnHighlights(on: Boolean) = change { it.copy(bestOnHighlights = on) }
+
+    fun blurryImages(): Set<String> = project?.let { ImageRanking.blurry(it.images, it.imageInfo) }.orEmpty()
+    fun duplicateImages(): Set<String> = project?.let { ImageRanking.duplicates(it.images, it.imageInfo) }.orEmpty()
+
+    /** Unscharfe und doppelte Bilder auf einmal entfernen. */
+    fun removeWeakImages() {
+        val weak = blurryImages() + duplicateImages()
+        if (weak.isEmpty()) return
+        change { p ->
+            weak.forEach { File(it).delete() }
+            p.copy(images = p.images - weak, imageInfo = p.imageInfo - weak)
+        }
+    }
+
     private suspend fun analyzeMissing() {
         val missing = project?.let { p -> p.images.filter { it !in p.imageInfo } }.orEmpty()
         if (missing.isEmpty()) return
         _state.update { it.copy(analyzingFaces = it.analyzingFaces + missing.size) }
         for (path in missing) {
             val info = runCatching { FaceAnalyzer.analyze(File(path)) }.getOrNull()
+                ?.let { i -> pendingTakenAt.remove(path)?.let { i.copy(takenAt = it) } ?: i }
             if (info != null) change { it.copy(imageInfo = it.imageInfo + (path to info)) }
             _state.update { it.copy(analyzingFaces = it.analyzingFaces - 1) }
         }
@@ -206,8 +230,9 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
             val files = mutableListOf<String>()
             var failed = 0
             for (u in uris) {
+                val taken = importer.takenAt(u)
                 runCatching { importer.importImage(u, dir) }
-                    .onSuccess { files += it.absolutePath }
+                    .onSuccess { files += it.absolutePath; taken?.let { t -> pendingTakenAt[it.absolutePath] = t } }
                     .onFailure { failed++ }
                 _state.update { it.copy(importingImages = it.importingImages - 1) }
             }
@@ -300,6 +325,9 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
     // ------------------------------------------------------------ Farbe
 
     fun updateColor(f: (ColorGrade) -> ColorGrade) = change(recut = false) { it.copy(color = f(it.color)) }
+
+    fun updateCinema(f: (de.synvyropic.model.CinemaLook) -> de.synvyropic.model.CinemaLook) =
+        change(recut = false) { it.copy(cinema = f(it.cinema)) }
 
     fun resetColor() = updateColor { ColorGrade(lutPath = it.lutPath, lutName = it.lutName, lutIntensity = it.lutIntensity) }
 

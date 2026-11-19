@@ -331,6 +331,10 @@ uniform highp sampler3D uLut;
 uniform float uLutAmount;  // 0 = keine LUT
 uniform float uLutSize;
 uniform float uVignette;   // 0..1
+uniform float uBloom;      // Kino-Look 0..1
+uniform float uHalation;
+uniform float uGrain;
+uniform float uLetterbox;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
@@ -359,6 +363,20 @@ void main() {
         col = mix(col, col * vec3(1.05, 0.98, 0.9), uVhs);
     }
     col *= 1.0 + 0.18 * uBright;
+    // Kino-Look: Glühen + Lichtsaum aus unscharfen Mipmap-Stufen
+    if (uBloom > 0.001 || uHalation > 0.001) {
+        vec3 b1 = textureLod(uTex, uv, 3.0).rgb;
+        vec3 b2 = textureLod(uTex, uv, 5.0).rgb;
+        vec3 glow = max(b1 - 0.6, 0.0) * 1.5 + max(b2 - 0.55, 0.0);
+        col += glow * uBloom;
+        float hl = dot(max(b2 - 0.5, 0.0), vec3(0.3, 0.6, 0.1));
+        col += vec3(1.0, 0.35, 0.15) * hl * uHalation * 1.6;
+    }
+    if (uGrain > 0.001) {
+        col += (hash(uv * uRes + fract(uTime * 7.3) * 113.0) - 0.5) * 0.14 * uGrain;
+    }
+    float bar = uLetterbox * 0.12;
+    if (uv.y < bar || uv.y > 1.0 - bar) col = vec3(0.0);
     fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }
 """
@@ -400,6 +418,18 @@ void main() {
         c.b = texture(uTex, uv - vec2(o, 0.0)).b;
     }
     fragColor = c * uAlpha;
+}
+"""
+
+    /** Kopiert eine Textur (für Bewegungsunschärfe-Mittelung und Ausgabe). */
+    const val COPY = """#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uTex;
+uniform float uAlpha;
+void main() {
+    fragColor = vec4(texture(uTex, vUv).rgb, 1.0) * uAlpha;
 }
 """
 }

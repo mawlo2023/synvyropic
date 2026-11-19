@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.platform.LocalContext
 import de.synvyropic.app.export.ExportManager
 import androidx.compose.foundation.layout.Arrangement
@@ -282,6 +284,33 @@ private fun ImagesSection(project: Project, state: EditorState, vm: EditorViewMo
                 OutlinedButton(onClick = vm::shuffleImages) {
                     Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(8.dp)); Text("Mischen")
                 }
+                OutlinedButton(onClick = vm::sortByDate) {
+                    Icon(Icons.Filled.Event, null); Spacer(Modifier.width(8.dp)); Text("Nach Datum")
+                }
+            }
+        }
+        if (project.images.size > 1) {
+            FilterChip(
+                selected = project.bestOnHighlights,
+                onClick = { vm.setBestOnHighlights(!project.bestOnHighlights) },
+                label = { Text("Beste Bilder auf Anfang & Drops") },
+                leadingIcon = { Icon(Icons.Filled.AutoAwesome, null, Modifier.size(18.dp)) },
+            )
+        }
+        val blurry = remember(project.images, project.imageInfo) { vm.blurryImages() }
+        val dupes = remember(project.images, project.imageInfo) { vm.duplicateImages() }
+        if (blurry.isNotEmpty() || dupes.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    listOfNotNull(
+                        blurry.size.takeIf { it > 0 }?.let { "$it unscharf" },
+                        dupes.size.takeIf { it > 0 }?.let { "$it doppelt" },
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Rgb.Orange,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = vm::removeWeakImages) { Text("Entfernen") }
             }
         }
         if (state.analyzingFaces > 0) {
@@ -306,6 +335,7 @@ private fun ImagesSection(project: Project, state: EditorState, vm: EditorViewMo
                         path = path,
                         index = i,
                         faces = info?.faces?.size,
+                        warning = when (path) { in dupes -> "doppelt"; in blurry -> "unscharf"; else -> null },
                         fitLabel = fitLabel(info?.fit, vm.resolvedFit(path)),
                         onFit = { vm.cycleFit(path) },
                         isFirst = i == 0,
@@ -322,7 +352,7 @@ private fun ImagesSection(project: Project, state: EditorState, vm: EditorViewMo
 
 @Composable
 private fun ImageThumb(
-    path: String, index: Int, faces: Int?, fitLabel: String, onFit: () -> Unit,
+    path: String, index: Int, faces: Int?, warning: String?, fitLabel: String, onFit: () -> Unit,
     isFirst: Boolean, isLast: Boolean,
     onLeft: () -> Unit, onRight: () -> Unit, onRemove: () -> Unit,
 ) {
@@ -342,6 +372,15 @@ private fun ImageThumb(
             )
             IconButton(onClick = onRemove, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) {
                 Icon(Icons.Filled.Close, "Entfernen", modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(50)))
+            }
+            if (warning != null) {
+                Text(
+                    warning,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Black,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp)
+                        .background(Rgb.Orange, RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
+                )
             }
             if (faces != null && faces > 0) {
                 Row(

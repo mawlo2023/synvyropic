@@ -19,6 +19,8 @@ data class Project(
     /** null = Raster des Stils verwenden. */
     val beatsPerCut: Int? = null,
     val lengthMode: LengthMode = LengthMode.FIT_IMAGES,
+    /** Beste Bilder auf Anfang und Drops legen. */
+    val bestOnHighlights: Boolean = false,
     val seed: Int = 1,
     /** Stil aller Bild-Untertitel (Text steht in ImageInfo.caption). */
     val captionStyle: TextStyle = TextStyle.CAPTION,
@@ -28,6 +30,7 @@ data class Project(
     val clips: List<Clip> = emptyList(),
     val texts: List<TextOverlay> = emptyList(),
     val color: ColorGrade = ColorGrade(),
+    val cinema: CinemaLook = CinemaLook(),
     val watermark: Watermark? = null,
     val intro: TitleCard? = null,
     val outro: TitleCard? = null,
@@ -140,6 +143,14 @@ data class ImageInfo(
     val color: ColorGrade? = null,
     /** Untertitel, solange dieses Bild zu sehen ist. */
     val caption: String? = null,
+    /** Aufnahmezeit (EXIF), falls bekannt. */
+    val takenAt: Long? = null,
+    /** Schärfe (Laplace-Varianz, relativ vergleichbar innerhalb eines Projekts). */
+    val sharpness: Float? = null,
+    /** Wahrnehmungs-Hash (dHash) zum Erkennen fast gleicher Fotos. */
+    val dhash: Long? = null,
+    /** Farbigkeit 0..~1. */
+    val colorfulness: Float? = null,
 )
 
 @Serializable
@@ -242,6 +253,27 @@ data class ClipEffect(
     val intensity: Float = 0.5f,
     val beatReactive: Boolean = true,
 )
+
+/** Kino-Look: Balken, Glühen, Lichtsaum, Filmkorn, Bewegungsunschärfe (alle 0..1). */
+@Serializable
+data class CinemaLook(
+    /** Cinemascope-Balken oben/unten. */
+    val letterbox: Float = 0f,
+    /** Glühen um helle Stellen. */
+    val bloom: Float = 0f,
+    /** Rötlicher Lichtsaum um Spitzlichter (wie bei Kinofilm). */
+    val halation: Float = 0f,
+    /** Filmkorn. */
+    val grain: Float = 0f,
+    /** Bewegungsunschärfe beim Export (mehrere Teilbilder pro Frame). */
+    val motionBlur: Boolean = false,
+) {
+    val isOff get() = letterbox == 0f && bloom == 0f && halation == 0f && grain == 0f && !motionBlur
+
+    companion object {
+        val PRESET = CinemaLook(letterbox = 0.6f, bloom = 0.35f, halation = 0.3f, grain = 0.25f, motionBlur = true)
+    }
+}
 
 /**
  * Farbbearbeitung. Regler-Werte -1..1 (0 = neutral), Vignette 0..1.

@@ -148,7 +148,9 @@ class VideoExporter(private val context: Context) {
             for (n in 0 until totalFrames) {
                 coroutineContext.ensureActive()
                 val tMs = n * 1000L / fps
-                compositor.render(tMs, w, h, blocking = true)
+                // Bewegungsunschärfe: 4 Teilbilder über einen 180°-Shutter (halbe Frame-Dauer)
+                val samples = if (project.cinema.motionBlur) 4 else 1
+                compositor.render(tMs, w, h, blocking = true, samples = samples, shutterMs = 500f / fps)
                 egl.setPresentationTime(n * 1_000_000_000L / fps)
                 egl.swap()
                 drain(false)

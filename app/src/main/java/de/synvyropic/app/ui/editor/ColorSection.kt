@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import de.synvyropic.model.CinemaLook
 import de.synvyropic.model.ColorGrade
 import de.synvyropic.model.ColorLooks
 import de.synvyropic.model.Project
@@ -80,6 +81,27 @@ fun ColorSection(project: Project, vm: EditorViewModel, pickLut: () -> Unit) {
         if (!g.isNeutral) {
             TextButton(onClick = vm::resetColor) { Text("Look und Regler zurücksetzen") }
         }
+
+        // ---------------- Kino-Look
+        val c = project.cinema
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Kino-Look", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            if (c.isOff) {
+                TextButton(onClick = { vm.updateCinema { CinemaLook.PRESET } }) { Text("Einschalten") }
+            } else {
+                TextButton(onClick = { vm.updateCinema { CinemaLook() } }) { Text("Aus") }
+            }
+        }
+        val pctFmt: (Float) -> String = { "${(it * 100).toInt()} %" }
+        LabeledSlider("Kinobalken", c.letterbox, 0f..1f, pctFmt) { v -> vm.updateCinema { it.copy(letterbox = v) } }
+        LabeledSlider("Glühen (Bloom)", c.bloom, 0f..1f, pctFmt) { v -> vm.updateCinema { it.copy(bloom = v) } }
+        LabeledSlider("Lichtsaum (Halation)", c.halation, 0f..1f, pctFmt) { v -> vm.updateCinema { it.copy(halation = v) } }
+        LabeledSlider("Filmkorn", c.grain, 0f..1f, pctFmt) { v -> vm.updateCinema { it.copy(grain = v) } }
+        FilterChip(
+            selected = c.motionBlur,
+            onClick = { vm.updateCinema { it.copy(motionBlur = !it.motionBlur) } },
+            label = { Text("Bewegungsunschärfe (im Export)") },
+        )
     }
 }
 

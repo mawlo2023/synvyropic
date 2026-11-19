@@ -3,6 +3,7 @@ package de.synvyropic.app.render
 import android.opengl.GLES30
 import de.synvyropic.model.ClipEffectType
 import android.util.Half
+import de.synvyropic.model.CinemaLook
 import de.synvyropic.model.ClipState
 import de.synvyropic.model.ColorGrade
 import de.synvyropic.model.ColorLooks
@@ -38,6 +39,11 @@ class Compositor(val width: Int, val height: Int) {
     private val fboA = Fbo(width, height)
     private val fboB = Fbo(width, height)
     private val fboC = Fbo(width, height)
+    private val fboP = Fbo(width, height)
+    private val fboAcc by lazy { Fbo(width, height) }
+    private var accCreated = false
+    private val copyProgram = GlProgram(Shaders.VERTEX, Shaders.COPY, "copy")
+    private var cinema = CinemaLook()
     private val cache = TextureCache(maxSide = maxOf(width, height))
     private val black = ImageTexture.solid(0xFF000000.toInt())
 
@@ -76,6 +82,7 @@ class Compositor(val width: Int, val height: Int) {
         resolver = r
         overlays.setProject(project, OverlayResolver(project, r.timed, r::envelope))
         grade = project.color
+        cinema = project.cinema
         projectParams = ColorLooks.resolve(grade)
         if (grade.lutPath != loadedLutPath) loadLut(grade.lutPath)
         r.neededAround(0).forEach { cache.prefetch(r.timed[it].clip.imageUri) }
@@ -84,21 +91,65 @@ class Compositor(val width: Int, val height: Int) {
     val durationMs: Long get() = resolver?.durationMs ?: 0L
 
     /**
-     * Rendert Zeitpunkt [tMs] in den aktuell gebundenen Default-Framebuffer (Viewport [vw]×[vh]).
+     * Rendert Zeitpunkt [tMs] in den Default-Framebuffer (Viewport [vw]×[vh]).
      * @param blocking true = auf Texturen warten (Export), false = fehlende Bilder schwarz (Vorschau)
+     * @param samples Teilbilder für Bewegungsunschärfe (1 = aus), verteilt über [shutterMs]
      * @return true, wenn alle benötigten Bilder geladen waren
      */
-    fun render(tMs: Long, vw: Int, vh: Int, blocking: Boolean): Boolean {
+    fun render(tMs: Long, vw: Int, vh: Int, blocking: Boolean, samples: Int = 1, shutterMs: Float = 0f): Boolean {
         val r = resolver
-        val spec = r?.at(tMs)
-        if (r == null || spec == null) {
+        if (r == null || r.at(tMs) == null) {
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, vw, vh)
             GLES30.glClearColor(0f, 0f, 0f, 1f)
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
             return true
         }
+        var complete = true
+        if (samples <= 1) {
+            complete = renderScene(r, tMs, fboP, blocking)
+            present(fboP, vw, vh)
+        } else {
+            // Bewegungsunschärfe: laufender Mittelwert mehrerer Teilbilder
+            val acc = fboAcc
+            if (!accCreated) accCreated = true
+            acc.bind()
+            GLES30.glClearColor(0f, 0f, 0f, 1f)
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+            for (i in 0 until samples) {
+                val t = tMs + (i * shutterMs / samples).toLong()
+                complete = renderScene(r, t, fboP, blocking) && complete
+                acc.bind()
+                GLES30.glEnable(GLES30.GL_BLEND)
+                GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+                copyProgram.use()
+                bindTexture(0, fboP.texture)
+                copyProgram.set1i("uTex", 0)
+                copyProgram.set1f("uAlpha", 1f / (i + 1))
+                quad.draw()
+                GLES30.glDisable(GLES30.GL_BLEND)
+            }
+            present(acc, vw, vh)
+        }
+        // Texte, Intro/Outro, Wasserzeichen (unabhängig von Farbe und Unschärfe)
+        overlays.render(tMs)
+        return complete
+    }
 
+    /** Fertiges Bild auf den Bildschirm/Encoder kopieren. */
+    private fun present(src: Fbo, vw: Int, vh: Int) {
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        GLES30.glViewport(0, 0, vw, vh)
+        copyProgram.use()
+        bindTexture(0, src.texture)
+        copyProgram.set1i("uTex", 0)
+        copyProgram.set1f("uAlpha", 1f)
+        quad.draw()
+    }
+
+    /** Ein Bild der Timeline (ohne Texte) in [target] rendern. */
+    private fun renderScene(r: FrameResolver, tMs: Long, target: Fbo, blocking: Boolean): Boolean {
+        val spec = r.at(tMs) ?: return true
         // Vorladen der nächsten Bilder
         val needed = r.neededAround(tMs).map { r.timed[it].clip.imageUri }
         needed.forEach(cache::prefetch)
@@ -146,11 +197,16 @@ class Compositor(val width: Int, val height: Int) {
             source = fboC
         }
 
-        // Post-Pass → Bildschirm/Encoder
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
-        GLES30.glViewport(0, 0, vw, vh)
+        // Post-Pass → Ziel-FBO (Farbe, LUT, Beat-Effekte, Kino-Look)
+        target.bind()
         postProgram.use()
         bindTexture(0, source.texture)
+        val glow = cinema.bloom > 0.001f || cinema.halation > 0.001f
+        if (glow) {
+            // Unschärfestufen für Glühen/Lichtsaum
+            GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_LINEAR)
+        }
         postProgram.set1i("uTex", 0)
         postProgram.set2f("uRes", width.toFloat(), height.toFloat())
         postProgram.set1f("uTime", tMs / 1000f)
@@ -164,9 +220,15 @@ class Compositor(val width: Int, val height: Int) {
         postProgram.set1f("uLutSize", lutSize)
         postProgram.set1f("uLutAmount", if (lutLoaded) grade.lutIntensity.coerceIn(0f, 1f) else 0f)
         postProgram.set1f("uVignette", projectParams.vignette)
+        postProgram.set1f("uBloom", cinema.bloom)
+        postProgram.set1f("uHalation", cinema.halation)
+        postProgram.set1f("uGrain", cinema.grain)
+        postProgram.set1f("uLetterbox", cinema.letterbox)
         quad.draw()
-        // Texte, Intro/Outro, Wasserzeichen (unabhängig vom Farb-Look)
-        overlays.render(tMs)
+        if (glow) {
+            bindTexture(0, source.texture)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        }
         return complete
     }
 
@@ -251,7 +313,9 @@ class Compositor(val width: Int, val height: Int) {
         cache.release()
         overlays.release()
         black.release()
-        fboA.release(); fboB.release(); fboC.release()
+        fboA.release(); fboB.release(); fboC.release(); fboP.release()
+        if (accCreated) fboAcc.release()
+        copyProgram.release()
         GLES30.glDeleteTextures(1, intArrayOf(lutTexture), 0)
         clipProgram.release(); postProgram.release(); transitionProgram.release()
         quad.release()

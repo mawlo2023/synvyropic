@@ -21,8 +21,16 @@ object AutoCut {
     /** Baut die Clips eines Projekts neu auf (behält Musik/Einstellungen). */
     fun apply(project: Project): Project {
         val style = Styles.byId(project.styleId)
+        // Beste Bilder auf den Anfang und die Drops legen (nur mit Beat-Analyse sinnvoll)
+        val images = if (project.bestOnHighlights) {
+            val bpc = project.beatsPerCut ?: style.beatsPerCut
+            val grid = project.music?.beats
+            val first = grid?.beatsMs?.indexOfFirst { it >= (project.music?.startMs ?: 0) }?.coerceAtLeast(0) ?: 0
+            val dropSlots = grid?.dropIndices?.map { (it - first) / bpc }?.filter { it > 0 }.orEmpty()
+            ImageRanking.placeBest(project.images, project.imageInfo, listOf(0) + dropSlots)
+        } else project.images
         val r = build(
-            imageUris = project.images,
+            imageUris = images,
             style = style,
             music = project.music,
             beatsPerCut = project.beatsPerCut ?: style.beatsPerCut,

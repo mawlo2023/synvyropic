@@ -66,6 +66,16 @@ class MediaImporter(private val context: Context) {
         out
     }
 
+    /** Aufnahmezeit aus den EXIF-Daten der Originaldatei (vor dem Neu-Kodieren lesen!). */
+    fun takenAt(uri: Uri): Long? = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            val exif = android.media.ExifInterface(input)
+            val raw = exif.getAttribute(android.media.ExifInterface.TAG_DATETIME_ORIGINAL)
+                ?: exif.getAttribute(android.media.ExifInterface.TAG_DATETIME)
+            raw?.let { java.text.SimpleDateFormat("yyyy:MM:dd HH:mm:ss", java.util.Locale.US).parse(it)?.time }
+        }
+    }.getOrNull()
+
     fun displayName(uri: Uri): String? = runCatching {
         context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
             if (it.moveToFirst()) it.getString(0) else null
