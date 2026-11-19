@@ -164,8 +164,9 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
                     }
                 }
             } else {
+                val previewHeight = maxHeight * 0.42f
                 Column(Modifier.fillMaxSize()) {
-                    if (hasPreview) PreviewPane(preview, project, Modifier.fillMaxWidth().height(maxHeight * 0.42f).padding(top = 8.dp))
+                    if (hasPreview) PreviewPane(preview, project, Modifier.fillMaxWidth().height(previewHeight).padding(top = 8.dp))
                     LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         settingsSections(project, state, vm, actions)
                         timelineSection(state, seek)
