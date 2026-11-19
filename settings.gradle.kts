@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Synvyropic"
-include(":app", ":core-model")
+include(":app", ":core-model", ":audio")

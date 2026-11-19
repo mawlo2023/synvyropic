@@ -1,15 +1,18 @@
 package de.synvyropic.app.ui
 
 import androidx.compose.runtime.Composable
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import de.synvyropic.app.ui.screens.NewProjectScreen
+import androidx.navigation.navArgument
+import de.synvyropic.app.ui.editor.EditorScreen
 import de.synvyropic.app.ui.screens.ProjectListScreen
 
 object Routes {
     const val PROJECTS = "projects"
-    const val NEW_PROJECT = "new_project"
+    const val EDITOR = "editor/{projectId}"
+    fun editor(id: String) = "editor/$id"
 }
 
 @Composable
@@ -17,10 +20,10 @@ fun SynvyropicNavHost() {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = Routes.PROJECTS) {
         composable(Routes.PROJECTS) {
-            ProjectListScreen(onNewProject = { nav.navigate(Routes.NEW_PROJECT) })
+            ProjectListScreen(onOpen = { nav.navigate(Routes.editor(it)) })
         }
-        composable(Routes.NEW_PROJECT) {
-            NewProjectScreen(onBack = { nav.popBackStack() })
+        composable(Routes.EDITOR, arguments = listOf(navArgument("projectId") { type = NavType.StringType })) {
+            EditorScreen(onBack = { nav.popBackStack() })
         }
     }
 }

@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Ab M1: Zugriff auf Bilder und Musik (Android 13 granular) -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- Keine Medien-Berechtigungen nötig: Fotoauswahl und Dateiauswahl gewähren Zugriff pro Datei. -->
+
+    <!-- Prüfen, ob Google Fotos installiert ist (Paket-Sichtbarkeit ab Android 11). -->
+    <queries>
+        <package android:name="com.google.android.apps.photos" />
+    </queries>
 
     <application
         android:allowBackup="true"
@@ -16,7 +19,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Synvyropic">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

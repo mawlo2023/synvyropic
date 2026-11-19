@@ -12,6 +12,12 @@ data class Project(
     val updatedAt: Long = createdAt,
     val format: AspectFormat = AspectFormat.PORTRAIT_9_16,
     val styleId: String = "glitch_energy",
+    /** Ausgewählte Quellbilder (Reihenfolge = Wunschreihenfolge). */
+    val images: List<String> = emptyList(),
+    /** null = Raster des Stils verwenden. */
+    val beatsPerCut: Int? = null,
+    val lengthMode: LengthMode = LengthMode.FIT_IMAGES,
+    val seed: Int = 1,
     val music: MusicTrack? = null,
     val clips: List<Clip> = emptyList(),
     val texts: List<TextOverlay> = emptyList(),
