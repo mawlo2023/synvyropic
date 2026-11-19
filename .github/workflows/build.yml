@@ -27,9 +27,21 @@ jobs:
       - name: Signierschlüssel bereitstellen
         env:
           KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            # Leerzeichen/Zeilenumbrüche entfernen, die beim Kopieren entstehen können
+            CLEAN=$(printf '%s' "$KEYSTORE_BASE64" | tr -d ' \r\n\t')
+            echo "Länge des Secrets nach Bereinigung: ${#CLEAN} Zeichen"
+            if ! printf '%s' "$CLEAN" | base64 -d > "$RUNNER_TEMP/release.jks" 2>/dev/null; then
+              echo "::error::SIGNING_KEYSTORE_BASE64 ist kein gültiges Base64 (unvollständig kopiert?). Bitte Secret neu anlegen."
+              exit 1
+            fi
+            if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$SIGNING_STORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" > /dev/null 2>&1; then
+              echo "::error::Keystore lässt sich nicht öffnen – Passwort oder Alias (SIGNING_STORE_PASSWORD / SIGNING_KEY_ALIAS) prüfen."
+              exit 1
+            fi
             echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
             echo "Release-Signierung aktiv."
           else
