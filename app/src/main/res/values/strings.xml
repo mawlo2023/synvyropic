@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Synvyropic</string>
+    <string name="projects_title">Meine Projekte</string>
+    <string name="projects_empty_title">Noch keine Projekte</string>
+    <string name="projects_empty_text">Erstelle aus deinen Bildern und Lieblingsmusik ein Reel oder eine Slideshow – Übergänge automatisch im Takt.</string>
+    <string name="new_project">Neues Projekt</string>
+    <string name="back">Zurück</string>
+    <string name="step_images">Bilder wählen</string>
+    <string name="step_images_desc">Mehrere Fotos aus der Galerie, Reihenfolge per Drag &amp; Drop</string>
+    <string name="step_music">Musik wählen</string>
+    <string name="step_music_desc">Audiodatei wählen – Beats werden automatisch erkannt</string>
+    <string name="step_format">Format &amp; Stil</string>
+    <string name="step_format_desc">9:16 Reel oder 16:9 Slideshow, Stil wie „Glitch Energy“</string>
+    <string name="step_create">Video erstellen</string>
+    <string name="coming_soon">Kommt in Ausbaustufe M1</string>
+</resources>

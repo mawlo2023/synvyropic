@@ -3,7 +3,7 @@
 > Android-App, die aus Einzelbildern und Musik automatisch beat-synchrone Reels und Slideshows
 > mit professionellen GPU-Übergängen erzeugt.
 >
-> Status: **Entwurf v0.1** – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
+> Status: **v0.2 – freigegeben, M0 in Arbeit** – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
 
 ---
 
@@ -12,9 +12,9 @@
 | Punkt | Festlegung |
 |---|---|
 | Zielgerät | OnePlus 8 Pro, Android 13 (API 33), Snapdragon 865 |
-| Mindest-Android | Android 8.0 (API 26) – offen, siehe §9 |
+| Mindest-Android | Android 13 (API 33) |
 | Sprache der Oberfläche | Deutsch |
-| Verteilung | APK per Sideload, gebaut über GitHub Actions |
+| Verteilung | APK per Sideload, gebaut über GitHub Actions, signiert mit festem Keystore (GitHub-Secret) |
 | Bedienkonzept | **Auto + Feinschliff**: ein Tipp erzeugt ein fertiges Video, danach ist jeder Clip einzeln anpassbar |
 
 ## 2. Kernablauf (User Flow)
@@ -69,7 +69,11 @@ Jeder Übergang hat: Dauer (in Beats oder ms), Intensität, Easing-Kurve; Glitch
 - Speicherung als JSON (kotlinx.serialization) im App-Speicher; Bilder/Audio werden per URI referenziert, bei Bedarf in den App-Speicher kopiert, damit Projekte nicht „brechen“.
 - Projekt duplizieren, umbenennen, löschen, erneut exportieren.
 
-### 3.8 Export
+### 3.8 Branding
+- **Eigenes Wasserzeichen**: Logo (Bild mit Transparenz) und/oder Text, Ecke wählbar, Deckkraft und Größe einstellbar, für jedes Projekt ein-/ausschaltbar.
+- **Intro-/Outro-Karte**: Titel + Untertitel, Hintergrundfarbe oder -bild, animiert (Pop, Glitch, Fade); Intro wird auf den ersten Beat bzw. Drop getaktet.
+
+### 3.9 Export
 | Format | Auflösung | Hinweis |
 |---|---|---|
 | 9:16 | 1080×1920 | Standard Reels/TikTok/Shorts |
@@ -135,7 +139,7 @@ Ein Stil ist eine Regelmenge: Schnittraster, Übergangspool (gewichtet), Effekt 
 | **M1 – Erster Durchstich** | Bild-/Musikauswahl, Beat-Analyse, Auto-Schnitt (einfach), GL-Vorschau, Export 1080p, Crossfade + Ken Burns | **Erstes echtes beat-synchrones Video** |
 | **M2 – Effekt-Engine** | Shader-Framework, RGB/Glitch-Familie, Bewegung/Zoom-Familie, beat-reaktive Parameter | Profi-Übergänge |
 | **M3 – Licht & Farbe** | Licht/Flash, Formen/Wipes, Farb-Presets, LUT-Import | Komplette Effektpalette |
-| **M4 – Editor & Text** | Feinschliff-Editor pro Clip, Text-Overlays, Projektverwaltung, Stil-Presets | Vollständiger MVP |
+| **M4 – Editor & Text** | Feinschliff-Editor pro Clip, Text-Overlays, Wasserzeichen, Intro/Outro, Projektverwaltung, Stil-Presets | Vollständiger MVP |
 | **M5 – Feinschliff** | 4K, HEVC, 60 fps, Performance, Musik-Wellenform-Editor | Version 1.0 |
 
 ## 7. Qualitätsziele
@@ -147,9 +151,14 @@ Ein Stil ist eine Regelmenge: Schnittraster, Übergangspool (gewichtet), Effekt 
 ## 8. Später denkbar (nicht MVP)
 Videoclips als Quelle · Sticker/Overlays · Velocity/Speed-Ramps · Templates teilen · Auto-Reihenfolge nach Bildqualität · KI-Hintergrund-Entfernung · Tonspur aus Video übernehmen.
 
-## 9. Offene Fragen
-- [ ] **Signierung:** Für Updates ohne Neuinstallation braucht die APK immer denselben Schlüssel → eigenen Keystore als GitHub-Secret anlegen?
-- [ ] **Mindest-Android-Version:** nur dein Gerät (API 33) oder breiter (API 26)?
+## 9. Entscheidungen
+
+| Frage | Entscheidung |
+|---|---|
+| Signierung | Fester Keystore, als GitHub-Secrets hinterlegt → Updates ohne Neuinstallation |
+| Mindest-Android | API 33 (Android 13) |
+| Branding | Eigenes Wasserzeichen + Intro/Outro-Karte (beides optional pro Projekt) |
+
+## 10. Offene Fragen
 - [ ] **Bildquellen:** nur Galerie oder auch Ordner/Cloud?
-- [ ] **Wasserzeichen/Intro/Outro:** gewünscht?
-- [ ] **Bildschirmausrichtung:** App nur hochkant oder auch quer?
+- [ ] **Bildschirmausrichtung:** App nur hochkant (aktuell) oder auch quer?
