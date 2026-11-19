@@ -41,11 +41,20 @@ class OverlayRenderer(private val width: Int, private val height: Int) {
         textCache.keys.filter { it !in keys }.forEach { textCache.remove(it)?.release() }
     }
 
-    fun render(tMs: Long) {
+    enum class Layer { ALL, BEHIND, FRONT }
+
+    /** Zeichnet Texte; BEHIND = nur Texte hinter der Person (+ Abdunkelung), FRONT = der Rest + Wasserzeichen. */
+    fun render(tMs: Long, layer: Layer = Layer.ALL) {
         val r = resolver ?: return
-        val dim = r.dimAt(tMs)
-        val frames = r.at(tMs)
-        val wm = watermark
+        val dim = if (layer == Layer.FRONT) 0f else r.dimAt(tMs)
+        val frames = r.at(tMs).filter {
+            when (layer) {
+                Layer.ALL -> true
+                Layer.BEHIND -> it.item.style.behindSubject
+                Layer.FRONT -> !it.item.style.behindSubject
+            }
+        }
+        val wm = if (layer == Layer.BEHIND) null else watermark
         if (dim <= 0.001f && frames.isEmpty() && wm == null) return
 
         GLES30.glEnable(GLES30.GL_BLEND)

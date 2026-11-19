@@ -31,6 +31,8 @@ data class Project(
     val texts: List<TextOverlay> = emptyList(),
     val color: ColorGrade = ColorGrade(),
     val cinema: CinemaLook = CinemaLook(),
+    /** 3D-Parallax für freigestellte Personen 0..1. */
+    val parallax: Float = 0f,
     val watermark: Watermark? = null,
     val intro: TitleCard? = null,
     val outro: TitleCard? = null,
@@ -151,6 +153,10 @@ data class ImageInfo(
     val dhash: Long? = null,
     /** Farbigkeit 0..~1. */
     val colorfulness: Float? = null,
+    /** Freistellungsmaske der Person (PNG, Alpha = Person), falls vorhanden. */
+    val maskPath: String? = null,
+    /** Freistellung wurde versucht (auch wenn keine Person gefunden). */
+    val maskTried: Boolean = false,
 )
 
 @Serializable
@@ -321,6 +327,8 @@ data class TextStyle(
     val y: Float = 0.5f,
     val animation: TextAnimation = TextAnimation.FADE,
     val syncToBeat: Boolean = false,
+    /** Text hinter der freigestellten Person zeichnen. */
+    val behindSubject: Boolean = false,
 ) {
     companion object {
         val TITLE = TextStyle(font = TextFont.BLACK, size = 110f, y = 0.42f, animation = TextAnimation.POP)

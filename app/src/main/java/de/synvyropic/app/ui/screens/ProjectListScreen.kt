@@ -67,7 +67,9 @@ import java.io.File
 @Composable
 fun ProjectListScreen(onOpen: (String) -> Unit, onVideos: () -> Unit, vm: ProjectListViewModel = viewModel()) {
     val projects by vm.projects.collectAsState()
+    val templates by vm.templates.collectAsState()
     var toDelete by remember { mutableStateOf<Project?>(null) }
+    var chooseTemplate by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.refresh() }
 
     Scaffold(
@@ -100,7 +102,7 @@ fun ProjectListScreen(onOpen: (String) -> Unit, onVideos: () -> Unit, vm: Projec
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
                 ExtendedFloatingActionButton(
-                    onClick = { vm.create(onOpen) },
+                    onClick = { if (templates.isEmpty()) vm.create(onOpen) else chooseTemplate = true },
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                     text = { Text(stringResource(R.string.new_project)) },
                 )
@@ -122,6 +124,28 @@ fun ProjectListScreen(onOpen: (String) -> Unit, onVideos: () -> Unit, vm: Projec
                 }
             }
         }
+    }
+
+    if (chooseTemplate) {
+        AlertDialog(
+            onDismissRequest = { chooseTemplate = false },
+            title = { Text("Neues Projekt") },
+            text = {
+                Column {
+                    TextButton(onClick = { chooseTemplate = false; vm.create(onOpen) }) { Text("Leeres Projekt") }
+                    Text("Aus Vorlage:", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                    templates.forEach { t ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { chooseTemplate = false; vm.createFromTemplate(t, onOpen) }, modifier = Modifier.weight(1f)) {
+                                Text(t.name, modifier = Modifier.fillMaxWidth())
+                            }
+                            IconButton(onClick = { vm.deleteTemplate(t.id) }) { Icon(Icons.Filled.Delete, "Vorlage löschen") }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { chooseTemplate = false }) { Text("Abbrechen") } },
+        )
     }
 
     toDelete?.let { p ->

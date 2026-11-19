@@ -12,6 +12,10 @@ data class ClipState(
     val fit: FitMode = FitMode.FILL,
     /** Farbkorrektur dieses Bildes (zusätzlich zum Projekt-Look). */
     val color: ColorGrade? = null,
+    /** Freistellungsmaske (für Parallax / Text hinter Person). */
+    val maskPath: String? = null,
+    /** Fortschritt durch die Sichtbarkeit des Clips 0..1 (für Parallax). */
+    val progress: Float = 0f,
 )
 
 /**
@@ -29,7 +33,7 @@ data class FrameSpec(
 )
 
 /** Übersetzt Projekt + Zeit in eine [FrameSpec]. Reine Logik, unabhängig von OpenGL. */
-class FrameResolver(project: Project, private val beatDecayMs: Float = 140f) {
+class FrameResolver(private val project: Project, private val beatDecayMs: Float = 140f) {
 
     val timed: List<TimedClip> = Timeline.resolve(project)
     val durationMs: Long = timed.lastOrNull()?.endMs ?: 0L
@@ -97,7 +101,8 @@ class FrameResolver(project: Project, private val beatDecayMs: Float = 140f) {
     private fun state(k: Int, t: Long): ClipState {
         val tc = timed[k]
         val m = tc.clip.motion
-        if (!m.enabled) return ClipState(k, tc.clip.imageUri, 1f, 0.5f, 0.5f, tc.clip.fit, tc.clip.color)
+        val mask = project.imageInfo[tc.clip.imageUri]?.maskPath
+        if (!m.enabled) return ClipState(k, tc.clip.imageUri, 1f, 0.5f, 0.5f, tc.clip.fit, tc.clip.color, mask, visibleProgress(k, t))
         val dIn = if (k > 0) activeDuration(tc.clip) / 2 else 0
         val dOut = if (k + 1 < timed.size) activeDuration(timed[k + 1].clip) / 2 else 0
         val s = tc.startMs - dIn
@@ -111,7 +116,18 @@ class FrameResolver(project: Project, private val beatDecayMs: Float = 140f) {
             centerY = lerp(m.startCenterY, m.endCenterY, u),
             fit = tc.clip.fit,
             color = tc.clip.color,
+            maskPath = mask,
+            progress = u,
         )
+    }
+
+    private fun visibleProgress(k: Int, t: Long): Float {
+        val tc = timed[k]
+        val dIn = if (k > 0) activeDuration(tc.clip) / 2 else 0
+        val dOut = if (k + 1 < timed.size) activeDuration(timed[k + 1].clip) / 2 else 0
+        val s = tc.startMs - dIn
+        val e = tc.endMs + dOut
+        return if (e > s) ((t - s).toFloat() / (e - s)).coerceIn(0f, 1f) else 0f
     }
 
     fun envelope(t: Long): Float {

@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.platform.LocalContext
@@ -119,6 +120,39 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
     }
     var selectedClip by remember { mutableStateOf<Int?>(null) }
     var showExport by remember { mutableStateOf(false) }
+    var templateDialog by remember { mutableStateOf<String?>(null) }
+    val templates by vm.templates.collectAsState()
+    when (templateDialog) {
+        "save" -> {
+            var name by remember { mutableStateOf(state.project?.name ?: "") }
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { templateDialog = null },
+                title = { Text("Als Vorlage speichern") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Gespeichert werden Stil, Raster, Format, Farbe/LUT, Kino-Look, Textstile, Intro/Outro und Wasserzeichen – keine Bilder und keine Musik.",
+                            style = MaterialTheme.typography.bodySmall)
+                        OutlinedTextField(name, { name = it }, label = { Text("Name der Vorlage") }, singleLine = true)
+                    }
+                },
+                confirmButton = { TextButton(onClick = { vm.saveAsTemplate(name); templateDialog = null }) { Text("Speichern") } },
+                dismissButton = { TextButton(onClick = { templateDialog = null }) { Text("Abbrechen") } },
+            )
+        }
+        "apply" -> androidx.compose.material3.AlertDialog(
+            onDismissRequest = { templateDialog = null },
+            title = { Text("Vorlage anwenden") },
+            text = {
+                Column {
+                    if (templates.isEmpty()) Text("Noch keine Vorlagen gespeichert.")
+                    templates.forEach { t ->
+                        TextButton(onClick = { vm.applyTemplate(t); templateDialog = null }) { Text(t.name) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { templateDialog = null }) { Text("Schließen") } },
+        )
+    }
     val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     if (showExport) state.project?.let { p ->
         ExportSheet(
@@ -163,6 +197,18 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") }
                 },
                 actions = {
+                    var menu by remember { mutableStateOf(false) }
+                    IconButton(onClick = { menu = true; vm.refreshTemplates() }) { Icon(Icons.Filled.MoreVert, "Menü") }
+                    androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Als Vorlage speichern") },
+                            onClick = { menu = false; templateDialog = "save" },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Vorlage anwenden") },
+                            onClick = { menu = false; templateDialog = "apply" },
+                        )
+                    }
                     val p = state.project
                     if (p != null && p.clips.isNotEmpty()) {
                         Button(
@@ -522,6 +568,12 @@ private fun FormatStyleSection(project: Project, vm: EditorViewModel) {
                 FilterChip(selected = bpc == n, onClick = { vm.setBeatsPerCut(n) }, label = { Text(if (n == 1) "1 Beat" else "$n Beats") })
             }
         }
+        Text("3D-Parallax (Personen)", style = MaterialTheme.typography.labelLarge)
+        val masked = project.imageInfo.values.count { it.maskPath != null }
+        LabeledSlider(
+            if (masked > 0) "Tiefenwirkung · $masked Foto(s) mit freigestellter Person" else "Tiefenwirkung (wirkt auf Fotos mit Personen)",
+            project.parallax, 0f..1f, { "${(it * 100).toInt()} %" },
+        ) { vm.setParallax(it) }
         Text("Videolänge", style = MaterialTheme.typography.labelLarge)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(

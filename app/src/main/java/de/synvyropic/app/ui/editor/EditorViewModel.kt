@@ -61,6 +61,8 @@ data class PreviewFocus(val startMs: Long, val endMs: Long)
 class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewModel(app) {
 
     private val repo = ProjectRepository.get(app)
+    private val templateRepo = de.synvyropic.app.data.TemplateRepository.get(app)
+    val templates = templateRepo.templates
     private val importer = MediaImporter(app)
     private val projectId: String = checkNotNull(saved["projectId"])
 
@@ -118,6 +120,27 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
     /** Aufnahmezeiten frisch importierter Bilder, bis ihre Analyse fertig ist. */
     private val pendingTakenAt = HashMap<String, Long>()
 
+    // ------------------------------------------------------------ Vorlagen
+
+    fun refreshTemplates() { viewModelScope.launch { templateRepo.refresh() } }
+
+    fun saveAsTemplate(name: String) {
+        val p = project ?: return
+        viewModelScope.launch {
+            templateRepo.save(p, name.ifBlank { p.name })
+            _state.update { it.copy(error = "Vorlage „${name.ifBlank { p.name }}“ gespeichert") }
+        }
+    }
+
+    fun applyTemplate(t: de.synvyropic.model.ProjectTemplate) {
+        val p = project ?: return
+        viewModelScope.launch {
+            val np = templateRepo.apply(t, p, repo.mediaDir(projectId))
+            _state.update { it.copy(project = np, timeline = Timeline.resolve(np)) }
+            repo.save(np)
+        }
+    }
+
     // ------------------------------------------------------------ Intelligente Reihenfolge
 
     fun sortByDate() = change { it.copy(images = ImageRanking.byDate(it.images, it.imageInfo)) }
@@ -139,7 +162,7 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
 
     private suspend fun analyzeMissing() {
         val missing = project?.let { p -> p.images.filter { it !in p.imageInfo } }.orEmpty()
-        if (missing.isEmpty()) return
+        if (missing.isEmpty()) { segmentMissing(); return }
         _state.update { it.copy(analyzingFaces = it.analyzingFaces + missing.size) }
         for (path in missing) {
             val info = runCatching { FaceAnalyzer.analyze(File(path)) }.getOrNull()
@@ -147,7 +170,22 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
             if (info != null) change { it.copy(imageInfo = it.imageInfo + (path to info)) }
             _state.update { it.copy(analyzingFaces = it.analyzingFaces - 1) }
         }
+        segmentMissing()
     }
+
+    /** Personen auf Fotos mit Gesichtern freistellen (für Parallax / Text hinter Person). */
+    private suspend fun segmentMissing() {
+        val todo = project?.let { p -> p.images.filter { p.imageInfo[it]?.let { i -> i.faces.isNotEmpty() && !i.maskTried } == true } }.orEmpty()
+        for (path in todo) {
+            val mask = runCatching { FaceAnalyzer.segment(File(path), repo.mediaDir(projectId)) }.getOrNull()
+            change(recut = false) { p ->
+                val i = p.imageInfo[path] ?: return@change p
+                p.copy(imageInfo = p.imageInfo + (path to i.copy(maskPath = mask, maskTried = true)))
+            }
+        }
+    }
+
+    fun setParallax(v: Float) = change(recut = false) { it.copy(parallax = v) }
 
     /** Darstellungsmodus eines Bildes durchschalten: Auto → Füllen → Blur → Schwenk → Auto. */
     fun cycleFit(path: String) {

@@ -87,3 +87,22 @@ class FrameResolverTest {
         assertEquals(expected, TransitionType.entries.map { it.name })
     }
 }
+
+class SubjectTest {
+    @Test
+    fun maskAndProgressReachRenderer() {
+        val p = AutoCut.apply(
+            Project(id = "p", name = "t", createdAt = 0, images = listOf("a", "b"),
+                imageInfo = mapOf("a" to ImageInfo(10, 10, maskPath = "/m/a.png", maskTried = true))),
+        )
+        val r = FrameResolver(p)
+        val s0 = r.at(0)!!.a
+        assertEquals("/m/a.png", s0.maskPath)
+        assertEquals(0f, s0.progress, 1e-3f)
+        assertTrue(r.at(1500)!!.a.progress > 0.5f)
+        val texts = p.copy(texts = listOf(TextOverlay("1", "Hinter", 0, 1000, TextStyle(behindSubject = true))))
+        val o = OverlayResolver(texts, Timeline.resolve(texts))
+        assertTrue(o.hasBehind(500))
+        assertTrue(!o.hasBehind(1500))
+    }
+}

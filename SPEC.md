@@ -3,7 +3,7 @@
 > Android-App, die aus Einzelbildern und Musik automatisch beat-synchrone Reels und Slideshows
 > mit professionellen GPU-Übergängen erzeugt.
 >
-> Status: **Version 1.0 veröffentlicht** – Erweiterungen in Planung – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
+> Status: **Version 1.0 veröffentlicht** – 1.1 in Arbeit – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
 
 ---
 
@@ -164,6 +164,18 @@ Ein Stil ist eine Regelmenge: Schnittraster, Übergangspool (gewichtet), Effekt 
 - Export 1080p/30 fps eines 30-s-Reels in < 30 s.
 - Beat-Treffer: Übergangsmitte liegt ±20 ms am Beat.
 - Keine Abstürze bei großen Bildern (Downsampling auf Zielauflösung, Textur-Cache mit Limit).
+
+## 7a. Version 1.1
+| Funktion | Umsetzung |
+|---|---|
+| Kino-Look | Kinobalken, Bloom, Halation, Filmkorn (Post-Pass mit Mipmap-Unschärfe); Bewegungsunschärfe im Export (4 Teilbilder, 180°-Shutter) |
+| Intelligente Reihenfolge | EXIF-Datum beim Import; Schärfe (Laplace), dHash, Farbigkeit; nach Datum sortieren, unscharf/doppelt markieren + entfernen, beste Bilder auf Anfang & Drops |
+| Vorlagen | Stil, Raster, Format, Farbe/LUT, Kino-Look, Parallax, Textstile, Intro/Outro, Wasserzeichen; speichern/anwenden im Editor-Menü, Auswahl bei „Neues Projekt“ |
+| 3D-Parallax | ML-Kit-Selfie-Segmentierung (offline) für Fotos mit Gesichtern; Person zoomt stärker, Hintergrund leicht unscharf |
+| Text hinter Person | Textstil „Hinter der Person“: Person wird aus dem fertigen Bild über die Texte gezeichnet |
+
+## 7b. Version 1.2 (geplant)
+Videoclips als Quelle (Zuschnitt, Originalton mit Ducking, Drehung), Tempo-Rampen (Zeitlupe → Zeitraffer auf dem Beat).
 
 ## 8. Später denkbar (nicht MVP)
 Videoclips als Quelle · Sticker/Overlays · Velocity/Speed-Ramps · Templates teilen · Auto-Reihenfolge nach Bildqualität · KI-Hintergrund-Entfernung · Tonspur aus Video übernehmen.

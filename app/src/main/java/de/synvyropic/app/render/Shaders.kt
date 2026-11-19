@@ -31,6 +31,9 @@ uniform vec4 uG1;        // Helligkeit, Kontrast, Sättigung, Wärme (-1..1)
 uniform vec3 uG2;        // Tönung, Fade (0..0.3), aktiv (0/1)
 uniform vec3 uShadow;    // Split-Toning Schatten
 uniform vec3 uHigh;      // Split-Toning Lichter
+uniform sampler2D uMask; // Freistellungsmaske (Alpha = Person)
+uniform float uParallax; // 0 = aus
+uniform float uFgZoom;   // zusätzlicher Zoom der Person (≥ 1)
 
 vec3 grade(vec3 c) {
     if (uG2.z < 0.5) return c;
@@ -60,6 +63,15 @@ void main() {
                + textureLod(uTex, bg + vec2(d.x, -d.y), 5.5).rgb * 0.15
                + textureLod(uTex, bg + vec2(-d.x, -d.y), 5.5).rgb * 0.15;
         fragColor = vec4(grade(c) * 0.6, 1.0);
+        return;
+    }
+    if (uParallax > 0.001) {
+        // Person zoomt stärker als der leicht unscharfe Hintergrund → räumliche Tiefe
+        vec2 uvFg = uCenter + (st - 0.5) * uSpan / uFgZoom;
+        float m = texture(uMask, uvFg).a;
+        vec3 bg = texture(uTex, uv, 1.5 * uParallax).rgb;
+        vec3 fg = texture(uTex, uvFg).rgb;
+        fragColor = vec4(grade(mix(bg, fg, m)), 1.0);
         return;
     }
     fragColor = vec4(grade(texture(uTex, uv).rgb), 1.0);
@@ -430,6 +442,25 @@ uniform sampler2D uTex;
 uniform float uAlpha;
 void main() {
     fragColor = vec4(texture(uTex, vUv).rgb, 1.0) * uAlpha;
+}
+"""
+
+    /** Person aus dem fertigen Bild erneut zeichnen (über „Text hinter Person“), vormultipliert. */
+    const val SUBJECT = """#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uScene;
+uniform sampler2D uMask;
+uniform vec2 uCenter;
+uniform vec2 uSpan;
+uniform float uAlpha;
+void main() {
+    vec2 st = vec2(vUv.x, 1.0 - vUv.y);
+    vec2 uv = uCenter + (st - 0.5) * uSpan;
+    float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+    float m = texture(uMask, uv).a * inside;
+    fragColor = vec4(texture(uScene, vUv).rgb, 1.0) * m * uAlpha;
 }
 """
 }

@@ -6,6 +6,8 @@ import de.synvyropic.model.ImageMetrics
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import com.google.mlkit.vision.segmentation.Segmentation
+import com.google.mlkit.vision.segmentation.selfie.SelfieSegmenterOptions
 import de.synvyropic.model.FaceBox
 import de.synvyropic.model.ImageInfo
 import kotlinx.coroutines.Dispatchers
@@ -60,6 +62,55 @@ object FaceAnalyzer {
         val metrics = runCatching { metrics(bmp) }.getOrNull()
         bmp.recycle()
         ImageInfo(w, h, faces, sharpness = metrics?.first, dhash = metrics?.second, colorfulness = metrics?.third)
+    }
+
+    private val segmenter by lazy {
+        Segmentation.getClient(
+            SelfieSegmenterOptions.Builder().setDetectorMode(SelfieSegmenterOptions.SINGLE_IMAGE_MODE).build(),
+        )
+    }
+
+    /**
+     * Stellt die Person frei und speichert die Maske als PNG (Alpha = Person, max. 768 px).
+     * @return Pfad der Maske oder null, wenn kaum Person erkannt wurde
+     */
+    suspend fun segment(file: File, outDir: File): String? = withContext(Dispatchers.Default) {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        var sample = 1
+        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 768) sample *= 2
+        val bmp = BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: return@withContext null
+        try {
+            val mask = suspendCancellableCoroutine { cont ->
+                segmenter.process(InputImage.fromBitmap(bmp, 0))
+                    .addOnSuccessListener { cont.resume(it) }
+                    .addOnFailureListener { cont.resumeWithException(it) }
+            }
+            val w = mask.width
+            val h = mask.height
+            val buf = mask.buffer.apply { rewind() }.asFloatBuffer()
+            val px = IntArray(w * h)
+            var covered = 0
+            for (i in 0 until w * h) {
+                val c = buf.get(i)
+                // weiche Kante, schwache Werte verwerfen
+                val a = (((c - 0.3f) / 0.5f).coerceIn(0f, 1f) * 255).toInt()
+                if (a > 128) covered++
+                px[i] = (a shl 24) or 0x00FFFFFF
+            }
+            // Weniger als 2 % Person → keine brauchbare Maske
+            if (covered < w * h * 0.02f) return@withContext null
+            val out = Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
+            val f = File(outDir, "mask_${file.nameWithoutExtension}.png")
+            f.outputStream().use { out.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            out.recycle()
+            f.absolutePath
+        } catch (e: Exception) {
+            null
+        } finally {
+            bmp.recycle()
+        }
     }
 
     /** Schärfe (512 px), dHash (9×8), Farbigkeit (64×64). */

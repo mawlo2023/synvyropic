@@ -43,6 +43,14 @@ class Compositor(val width: Int, val height: Int) {
     private val fboAcc by lazy { Fbo(width, height) }
     private var accCreated = false
     private val copyProgram = GlProgram(Shaders.VERTEX, Shaders.COPY, "copy")
+    private val subjectProgram = GlProgram(Shaders.VERTEX, Shaders.SUBJECT, "subject")
+    private var overlayResolver: OverlayResolver? = null
+    private var parallax = 0f
+    private var projectMasks: Map<String, String> = emptyMap()
+
+    /** Lage der freigestellten Person im aktuellen Frame (für die Personen-Ebene). */
+    private class Subject(val mask: String, val cx: Float, val cy: Float, val sx: Float, val sy: Float, val alpha: Float)
+    private val subjects = ArrayList<Subject>(2)
     private var cinema = CinemaLook()
     private val cache = TextureCache(maxSide = maxOf(width, height))
     private val black = ImageTexture.solid(0xFF000000.toInt())
@@ -80,7 +88,11 @@ class Compositor(val width: Int, val height: Int) {
     fun setProject(project: Project) {
         val r = FrameResolver(project)
         resolver = r
-        overlays.setProject(project, OverlayResolver(project, r.timed, r::envelope))
+        val o = OverlayResolver(project, r.timed, r::envelope)
+        overlayResolver = o
+        overlays.setProject(project, o)
+        parallax = project.parallax
+        projectMasks = project.imageInfo.mapNotNull { (k, v) -> v.maskPath?.let { k to it } }.toMap()
         grade = project.color
         cinema = project.cinema
         projectParams = ColorLooks.resolve(grade)
@@ -132,8 +144,34 @@ class Compositor(val width: Int, val height: Int) {
             present(acc, vw, vh)
         }
         // Texte, Intro/Outro, Wasserzeichen (unabhängig von Farbe und Unschärfe)
-        overlays.render(tMs)
+        if (overlayResolver?.hasBehind(tMs) == true && subjects.isNotEmpty()) {
+            overlays.render(tMs, OverlayRenderer.Layer.BEHIND)
+            drawSubjects(if (samples <= 1) fboP else fboAcc, blocking)
+            overlays.render(tMs, OverlayRenderer.Layer.FRONT)
+        } else {
+            overlays.render(tMs)
+        }
         return complete
+    }
+
+    /** Person aus dem fertigen Bild über die „hinteren“ Texte zeichnen. */
+    private fun drawSubjects(scene: Fbo, blocking: Boolean) {
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        subjectProgram.use()
+        subjectProgram.set1i("uScene", 0)
+        subjectProgram.set1i("uMask", 1)
+        for (sub in subjects) {
+            val mask = (if (blocking) cache.getBlocking(sub.mask) else cache.getIfReady(sub.mask)) ?: continue
+            bindTexture(0, scene.texture)
+            bindTexture(1, mask.id)
+            subjectProgram.set2f("uCenter", sub.cx, sub.cy)
+            subjectProgram.set2f("uSpan", sub.sx, sub.sy)
+            subjectProgram.set1f("uAlpha", sub.alpha)
+            quad.draw()
+        }
+        GLES30.glDisable(GLES30.GL_BLEND)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
     }
 
     /** Fertiges Bild auf den Bildschirm/Encoder kopieren. */
@@ -151,7 +189,10 @@ class Compositor(val width: Int, val height: Int) {
     private fun renderScene(r: FrameResolver, tMs: Long, target: Fbo, blocking: Boolean): Boolean {
         val spec = r.at(tMs) ?: return true
         // Vorladen der nächsten Bilder
-        val needed = r.neededAround(tMs).map { r.timed[it].clip.imageUri }
+        val needed = r.neededAround(tMs).flatMap { i ->
+            val uri = r.timed[i].clip.imageUri
+            listOfNotNull(uri, projectMasks[uri])
+        }
         needed.forEach(cache::prefetch)
         cache.evict(needed.toSet())
 
@@ -166,12 +207,14 @@ class Compositor(val width: Int, val height: Int) {
         val effect = spec.effect
         val pulseZoom = if (effect?.type == ClipEffectType.BEAT_PULSE) 1f + 0.05f * env * effect.intensity * 2f else 1f
 
-        drawClip(tex(spec.a.imageUri), spec.a, fboA, pulseZoom)
+        subjects.clear()
+        val pB = if (spec.b != null) spec.progress else 0f
+        drawClip(tex(spec.a.imageUri), spec.a, fboA, pulseZoom, blocking, subjectAlpha = if (spec.b == null) 1f else (1f - 2f * pB).coerceIn(0f, 1f))
         var source = fboA
         val b = spec.b
         val tr = spec.transition
         if (b != null && tr != null) {
-            drawClip(tex(b.imageUri), b, fboB, pulseZoom)
+            drawClip(tex(b.imageUri), b, fboB, pulseZoom, blocking, subjectAlpha = (2f * pB - 1f).coerceIn(0f, 1f))
             fboC.bind()
             transitionProgram.use()
             bindTexture(0, fboA.texture)
@@ -233,7 +276,7 @@ class Compositor(val width: Int, val height: Int) {
     }
 
     /** Bild „cover“ in das Format einpassen, Ken-Burns-Zoom/Schwenk anwenden. */
-    private fun drawClip(tex: ImageTexture, state: ClipState, target: Fbo, extraZoom: Float) {
+    private fun drawClip(tex: ImageTexture, state: ClipState, target: Fbo, extraZoom: Float, blocking: Boolean, subjectAlpha: Float) {
         target.bind()
         clipProgram.use()
         bindTexture(0, tex.id)
@@ -255,6 +298,7 @@ class Compositor(val width: Int, val height: Int) {
             val containX = coverX / minOf(coverX, coverY)
             val containY = coverY / minOf(coverX, coverY)
             clipProgram.set1i("uMode", 1)
+            clipProgram.set1f("uParallax", 0f)
             clipProgram.set2f("uCenter", 0.5f, 0.5f)
             clipProgram.set2f("uSpan", containX / zoom, containY / zoom)
             clipProgram.set2f("uBgSpan", coverX * 0.9f, coverY * 0.9f)
@@ -266,6 +310,23 @@ class Compositor(val width: Int, val height: Int) {
             clipProgram.set1i("uMode", 0)
             clipProgram.set2f("uCenter", cx, cy)
             clipProgram.set2f("uSpan", spanX, spanY)
+            // Parallax / Personen-Ebene
+            val maskPath = state.maskPath
+            val mask = maskPath?.let { if (blocking) cache.getBlocking(it) else cache.getIfReady(it) }
+            val fgZoom = 1f + parallax * 0.10f * state.progress
+            if (mask != null && parallax > 0.001f) {
+                bindTexture(1, mask.id)
+                clipProgram.set1i("uMask", 1)
+                clipProgram.set1f("uParallax", parallax)
+                clipProgram.set1f("uFgZoom", fgZoom)
+                GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            } else {
+                clipProgram.set1f("uParallax", 0f)
+            }
+            if (maskPath != null && subjectAlpha > 0.01f) {
+                val z = if (parallax > 0.001f) fgZoom else 1f
+                subjects += Subject(maskPath, cx, cy, spanX / z, spanY / z, subjectAlpha)
+            }
         }
         quad.draw()
     }
@@ -316,6 +377,7 @@ class Compositor(val width: Int, val height: Int) {
         fboA.release(); fboB.release(); fboC.release(); fboP.release()
         if (accCreated) fboAcc.release()
         copyProgram.release()
+        subjectProgram.release()
         GLES30.glDeleteTextures(1, intArrayOf(lutTexture), 0)
         clipProgram.release(); postProgram.release(); transitionProgram.release()
         quad.release()

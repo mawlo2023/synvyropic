@@ -90,6 +90,9 @@ class OverlayResolver(project: Project, timed: List<TimedClip>, private val enve
 
     fun at(t: Long): List<OverlayFrame> = items.filter { t >= it.startMs && t < it.endMs }.map { animate(it, t) }
 
+    /** Gibt es zu Zeitpunkt t Texte, die hinter der Person liegen sollen? */
+    fun hasBehind(t: Long): Boolean = items.any { it.style.behindSubject && t >= it.startMs && t < it.endMs }
+
     fun animate(item: OverlayItem, t: Long): OverlayFrame {
         val len = item.endMs - item.startMs
         val dur = min(450L, len / 3).coerceAtLeast(1)

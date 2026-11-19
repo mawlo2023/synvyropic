@@ -329,6 +329,15 @@ fun TextStyleEditor(style: TextStyle, onChange: (TextStyle) -> Unit) {
         }
         FilterChip(selected = style.syncToBeat, onClick = { onChange(style.copy(syncToBeat = !style.syncToBeat)) },
             label = { Text("Pulsiert im Takt") })
+        FilterChip(selected = style.behindSubject, onClick = { onChange(style.copy(behindSubject = !style.behindSubject)) },
+            label = { Text("Hinter der Person") })
+        if (style.behindSubject) {
+            Text(
+                "Wirkt auf Fotos, auf denen eine Person freigestellt wurde. Tipp: großer Titel, der hinter dem Kopf verschwindet.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

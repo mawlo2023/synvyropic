@@ -58,6 +58,7 @@ dependencies {
     implementation(project(":audio"))
     implementation(libs.coil.compose)
     implementation(libs.mlkit.face)
+    implementation(libs.mlkit.selfie)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

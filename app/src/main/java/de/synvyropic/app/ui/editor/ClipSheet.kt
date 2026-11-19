@@ -81,7 +81,8 @@ fun ClipSheet(index: Int, state: EditorState, vm: EditorViewModel, onDismiss: ()
             Text("Clip ${index + 1}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
                 "${formatMs(timed.startMs)} – ${formatMs(timed.endMs)} · ${clip.durationBeats} Beat(s)" +
-                    (info?.faces?.size?.takeIf { it > 0 }?.let { " · $it Gesicht(er)" } ?: ""),
+                    (info?.faces?.size?.takeIf { it > 0 }?.let { " · $it Gesicht(er)" } ?: "") +
+                    (if (info?.maskPath != null) " · Person freigestellt ✓" else ""),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
