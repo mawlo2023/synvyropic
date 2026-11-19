@@ -1,0 +1,205 @@
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+
+package de.synvyropic.app.ui.editor
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import de.synvyropic.app.ui.theme.Rgb
+import de.synvyropic.model.FitMode
+import de.synvyropic.model.Transition
+import de.synvyropic.model.TransitionFamily
+import de.synvyropic.model.TransitionType
+import kotlin.math.abs
+import kotlin.math.roundToLong
+
+private fun TransitionFamily.label() = when (this) {
+    TransitionFamily.BASIC -> "Basis"
+    TransitionFamily.RGB_GLITCH -> "RGB/Glitch"
+    TransitionFamily.MOTION_ZOOM -> "Bewegung"
+    TransitionFamily.LIGHT_FLASH -> "Licht"
+    TransitionFamily.SHAPE_WIPE -> "Formen"
+}
+
+private val flashColors = listOf(0xFFFFFFFF, 0xFFFF2D55, 0xFF2DFFB4, 0xFF2D7DFF, 0xFFFFD60A, 0xFFB44DFF)
+
+/** Bearbeitung eines Clips: Bildmodus und Übergang hinein. Jede Änderung spielt die Stelle in der Vorschau ab. */
+@Composable
+fun ClipSheet(index: Int, state: EditorState, vm: EditorViewModel, onDismiss: () -> Unit) {
+    val timed = state.timeline[index]
+    val clip = timed.clip
+    val project = state.project ?: return
+    val info = project.imageInfo[clip.imageUri]
+    val current = clip.transitionIn
+    val manual = project.transitionOverrides.containsKey(index)
+    val beatMs = vm.beatMs()
+    var family by remember(index) { mutableStateOf(current.type.family) }
+
+    fun update(t: Transition) = vm.setTransition(index, t)
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Clip ${index + 1}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                "${formatMs(timed.startMs)} – ${formatMs(timed.endMs)} · ${clip.durationBeats} Beat(s)" +
+                    (info?.faces?.size?.takeIf { it > 0 }?.let { " · $it Gesicht(er)" } ?: ""),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            // ---------------- Bildmodus
+            if (info != null) {
+                Text("Bildmodus", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(FitMode.AUTO to "Auto", FitMode.FILL to "Füllen", FitMode.BLUR to "Blur", FitMode.PAN to "Schwenk").forEach { (m, l) ->
+                        FilterChip(selected = info.fit == m, onClick = { vm.setFit(clip.imageUri, m) }, label = { Text(l) })
+                    }
+                }
+            }
+
+            if (index == 0) {
+                Text(
+                    "Der erste Clip hat keinen Übergang hinein.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                HorizontalDivider()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Übergang hinein", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                    FilterChip(
+                        selected = !manual,
+                        onClick = { vm.setTransition(index, null) },
+                        label = { Text(if (manual) "Wieder automatisch" else "Automatisch") },
+                    )
+                }
+
+                // Familien
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TransitionFamily.entries.forEach { f ->
+                        FilterChip(
+                            selected = family == f,
+                            onClick = { family = f },
+                            label = { Text(f.label()) },
+                            leadingIcon = { Box(Modifier.size(10.dp).background(familyColor(f.ordinal), CircleShape)) },
+                        )
+                    }
+                }
+                // Übergänge der gewählten Familie
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TransitionType.entries.filter { it.family == family }.forEach { t ->
+                        FilterChip(
+                            selected = current.type == t,
+                            onClick = {
+                                val dur = if (current.durationMs <= 0) (beatMs * 0.5f).roundToLong() else current.durationMs
+                                update(current.copy(type = t, durationMs = if (t == TransitionType.CUT) 0 else dur))
+                            },
+                            label = { Text(t.label()) },
+                        )
+                    }
+                }
+
+                if (current.type != TransitionType.CUT) {
+                    // Dauer in Beats
+                    Text("Dauer", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(0.25f to "¼ Beat", 0.5f to "½ Beat", 1f to "1 Beat", 2f to "2 Beats").forEach { (frac, l) ->
+                            val ms = (beatMs * frac).roundToLong()
+                            FilterChip(
+                                selected = abs(current.durationMs - ms) < beatMs * 0.1f,
+                                onClick = { update(current.copy(durationMs = ms)) },
+                                label = { Text(l) },
+                            )
+                        }
+                    }
+                    Text("${current.durationMs} ms – der Beat liegt genau in der Mitte", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                    // Intensität
+                    var intensity by remember(index, current.type) { mutableFloatStateOf(current.intensity) }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Intensität", style = MaterialTheme.typography.labelLarge)
+                        Text("${(intensity * 100).toInt()} %", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Slider(
+                        value = intensity,
+                        onValueChange = { intensity = it },
+                        valueRange = 0.1f..1f,
+                        onValueChangeFinished = { update(current.copy(intensity = intensity)) },
+                    )
+                    FilterChip(
+                        selected = current.beatReactive,
+                        onClick = { update(current.copy(beatReactive = !current.beatReactive)) },
+                        label = { Text("Intensität folgt dem Beat") },
+                    )
+
+                    // Farbe (Farb-Flash)
+                    if (current.type == TransitionType.COLOR_FLASH) {
+                        Text("Farbe", style = MaterialTheme.typography.labelLarge)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            flashColors.forEach { c ->
+                                val selected = current.colorArgb == c
+                                Box(
+                                    Modifier.size(36.dp).background(Color(c.toInt()), CircleShape)
+                                        .border(if (selected) 3.dp else 1.dp, if (selected) Color.White else Color.Gray, CircleShape)
+                                        .clickable { update(current.copy(colorArgb = c)) },
+                                )
+                            }
+                        }
+                    }
+                    // Winkel (Wipes, RGB-Split)
+                    if (current.type in setOf(TransitionType.LINE_WIPE, TransitionType.ZIGZAG_WIPE, TransitionType.RGB_SPLIT)) {
+                        Text("Richtung", style = MaterialTheme.typography.labelLarge)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(0f to "→", 45f to "↗", 90f to "↑", 135f to "↖", 180f to "←", 225f to "↙", 270f to "↓", 315f to "↘").forEach { (a, l) ->
+                                FilterChip(selected = current.angleDeg == a, onClick = { update(current.copy(angleDeg = a)) }, label = { Text(l) })
+                            }
+                        }
+                    }
+                }
+                OutlinedButton(onClick = { vm.focusCut(index) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Stelle erneut abspielen", color = Rgb.Green)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}

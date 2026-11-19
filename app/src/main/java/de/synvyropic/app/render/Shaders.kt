@@ -138,7 +138,7 @@ void main() {
     if (uType == 0) {                       // CUT
         col = p < 0.5 ? A(uv) : B(uv);
     } else if (uType == 1) {                // CROSSFADE
-        col = AB(uv, smoothstep(0.0, 1.0, p));
+        col = AB(uv, p);
     } else if (uType == 2) {                // RGB_SPLIT
         vec2 dir = vec2(cos(uAngle), sin(uAngle));
         col = rgbSplit(uv, dir * 0.06 * b, midMix(p, 0.08));
@@ -188,7 +188,7 @@ void main() {
         vec2 dir = uType == 10 ? vec2(1.0, 0.0) : uType == 11 ? vec2(-1.0, 0.0)
                  : uType == 12 ? vec2(0.0, -1.0) : vec2(0.0, 1.0);
         // Positionen „vor“ der Linie zeigen A, dahinter B (mit Spiegelung über FBO-Wrap)
-        float e = p * p * (3.0 - 2.0 * p);
+        float e = p;  // Easing kommt bereits vom FrameResolver
         if (dir.x + dir.y < 0.0) {
             // negative Richtung: Achse umdrehen, damit along in 0..1 bleibt
             vec2 f = vec2(1.0) - uv;

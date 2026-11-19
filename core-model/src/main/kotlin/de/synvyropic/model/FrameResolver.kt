@@ -70,9 +70,12 @@ class FrameResolver(project: Project, private val beatDecayMs: Float = 140f) {
 
     private fun transitionFrame(ai: Int, bi: Int, t: Long, d: Long): FrameSpec {
         val cut = timed[bi].startMs
-        val p = ((t - (cut - d / 2)).toFloat() / d).coerceIn(0f, 1f)
-        val effect = if (p < 0.5f) timed[ai].clip.effect else timed[bi].clip.effect
-        return FrameSpec(state(ai, t), state(bi, t), timed[bi].clip.transitionIn, p, envelope(t), effect)
+        val linear = ((t - (cut - d / 2)).toFloat() / d).coerceIn(0f, 1f)
+        val tr = timed[bi].clip.transitionIn
+        // Fortschreitende Übergänge weich beschleunigen; Höhepunkt-Übergänge bleiben linear (Peak auf dem Beat)
+        val p = if (tr.type.isProgressive) Easing.EASE_IN_OUT.apply(linear) else linear
+        val effect = if (linear < 0.5f) timed[ai].clip.effect else timed[bi].clip.effect
+        return FrameSpec(state(ai, t), state(bi, t), tr, p, envelope(t), effect)
     }
 
     private fun activeDuration(clip: Clip): Long =

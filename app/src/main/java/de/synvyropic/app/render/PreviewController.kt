@@ -73,9 +73,28 @@ class PreviewController(context: Context) {
         if (old == null || basePos > _duration.value) seekTo(0) else view.requestRender()
     }
 
+    // Schleifenbereich (z. B. beim Bearbeiten eines Übergangs); -1 = keine Schleife
+    private var loopStart = -1L
+    private var loopEnd = -1L
+
     fun toggle() = if (isPlaying) pause() else play()
 
+    /** Bereich in Schleife abspielen, bis der Nutzer pausiert, spult oder Play drückt. */
+    fun playLoop(startMs: Long, endMs: Long) {
+        val end = endMs.coerceAtMost(_duration.value)
+        if (end <= startMs) return
+        loopStart = startMs
+        loopEnd = end
+        seekInternal(startMs)
+        if (!isPlaying) startPlayback()
+    }
+
     fun play() {
+        loopStart = -1; loopEnd = -1
+        startPlayback()
+    }
+
+    private fun startPlayback() {
         val p = project ?: return
         if (p.clips.isEmpty()) return
         if (basePos >= _duration.value - 50) basePos = 0
@@ -93,6 +112,7 @@ class PreviewController(context: Context) {
     }
 
     fun pause() {
+        loopStart = -1; loopEnd = -1
         if (!isPlaying) return
         basePos = currentTime().coerceAtMost(_duration.value)
         isPlaying = false
@@ -105,6 +125,11 @@ class PreviewController(context: Context) {
     }
 
     fun seekTo(ms: Long) {
+        loopStart = -1; loopEnd = -1
+        seekInternal(ms)
+    }
+
+    private fun seekInternal(ms: Long) {
         val t = ms.coerceIn(0, _duration.value)
         basePos = t
         baseTime = SystemClock.elapsedRealtime()
@@ -136,6 +161,11 @@ class PreviewController(context: Context) {
         override fun run() {
             if (!isPlaying) return
             val t = currentTime()
+            if (loopEnd > 0 && t >= loopEnd) {
+                seekInternal(loopStart)
+                main.postDelayed(this, 40)
+                return
+            }
             if (t >= _duration.value) {
                 pause()
                 basePos = _duration.value

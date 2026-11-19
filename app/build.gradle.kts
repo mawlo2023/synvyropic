@@ -17,7 +17,7 @@ android {
         minSdk = 33
         targetSdk = 35
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
-        versionName = "0.1.${System.getenv("VERSION_CODE") ?: "0"}"
+        versionName = "0.2.${System.getenv("VERSION_CODE") ?: "0"}"
     }
 
     signingConfigs {
@@ -45,7 +45,10 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 }
 
 dependencies {

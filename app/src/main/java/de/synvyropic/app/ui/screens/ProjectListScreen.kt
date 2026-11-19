@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import de.synvyropic.app.BuildConfig
 import de.synvyropic.app.R
 import de.synvyropic.app.ui.editor.formatMs
 import de.synvyropic.app.ui.theme.Rgb
@@ -69,7 +70,16 @@ fun ProjectListScreen(onOpen: (String) -> Unit, onVideos: () -> Unit, vm: Projec
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.projects_title), fontWeight = FontWeight.Bold) })
+            TopAppBar(title = {
+                Column {
+                    Text(stringResource(R.string.projects_title), fontWeight = FontWeight.Bold)
+                    Text(
+                        "Version ${BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            })
         },
         floatingActionButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {

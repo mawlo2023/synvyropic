@@ -75,3 +75,36 @@ class AutoCutTest {
         assertEquals(10_000L, Timeline.durationMs(p))
     }
 }
+
+class OverrideAndEasingTest {
+    private val grid = BeatGrid(
+        bpm = 120f, beatsMs = (0 until 60).map { it * 500L }, strengths = List(60) { 1f },
+        downbeatIndices = (0 until 60 step 4).toList(),
+    )
+
+    @Test
+    fun manualTransitionSurvivesRecut() {
+        val manual = Transition(TransitionType.CIRCLE_WIPE, 700)
+        val base = Project(
+            id = "p", name = "t", createdAt = 0, images = (1..5).map { "i$it" },
+            music = MusicTrack("m", beats = grid), transitionOverrides = mapOf(2 to manual, 0 to manual),
+        )
+        val a = AutoCut.apply(base)
+        assertEquals(manual, a.clips[2].transitionIn)
+        assertEquals(TransitionType.CUT, a.clips[0].transitionIn.type) // Clip 0 nie überschrieben
+        // Neuer Stil + neu würfeln → Override bleibt
+        val b = AutoCut.apply(a.copy(styleId = Styles.FLASH_PARTY.id, seed = 7))
+        assertEquals(manual, b.clips[2].transitionIn)
+    }
+
+    @Test
+    fun easingEndpointsAndMonotonic() {
+        for (e in Easing.entries.filter { it != Easing.BACK_OUT }) {
+            assertEquals(0f, e.apply(0f), 1e-3f)
+            assertEquals(1f, e.apply(1f), 1e-3f)
+            var last = -1f
+            for (i in 0..20) { val v = e.apply(i / 20f); assertTrue("$e nicht monoton", v >= last - 1e-4f); last = v }
+        }
+        assertEquals(0.5f, Easing.EASE_IN_OUT.apply(0.5f), 1e-3f) // Mitte bleibt auf dem Beat
+    }
+}

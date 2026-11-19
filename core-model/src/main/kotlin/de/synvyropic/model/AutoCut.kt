@@ -31,8 +31,12 @@ object AutoCut {
             imageInfo = project.imageInfo,
             format = project.format,
         )
+        // Von Hand gewählte Übergänge übernehmen (nicht für Clip 0 – der hat keinen Übergang)
+        val clips = r.clips.mapIndexed { i, c ->
+            project.transitionOverrides[i]?.takeIf { i > 0 }?.let { c.copy(transitionIn = it) } ?: c
+        }
         return project.copy(
-            clips = r.clips,
+            clips = clips,
             music = project.music?.copy(startMs = r.musicStartMs),
             color = project.color.copy(presetId = style.colorPresetId),
         )

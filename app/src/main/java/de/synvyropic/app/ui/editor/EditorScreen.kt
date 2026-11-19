@@ -110,6 +110,16 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
     LaunchedEffect(state.project?.clips, state.project?.music, state.project?.format) {
         state.project?.takeIf { it.clips.isNotEmpty() }?.let(preview::setProject)
     }
+    // Änderungen sofort in der Vorschau zeigen: betroffenen Bereich in Schleife abspielen
+    LaunchedEffect(Unit) {
+        vm.focus.collect { f -> preview.playLoop(f.startMs, f.endMs) }
+    }
+    var selectedClip by remember { mutableStateOf<Int?>(null) }
+    selectedClip?.let { idx ->
+        if (idx < state.timeline.size) {
+            ClipSheet(index = idx, state = state, vm = vm, onDismiss = { selectedClip = null; preview.pause() })
+        }
+    }
 
     val pickPhotos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) {
         vm.addImages(it)
@@ -131,7 +141,7 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
                     if (p != null && p.clips.isNotEmpty()) {
                         Button(
                             onClick = { preview.pause(); ExportManager.start(context, p) },
-                            enabled = !state.timelineDirty,
+                            enabled = state.analysisProgress == null && state.importingImages == 0,
                             modifier = Modifier.padding(end = 8.dp),
                         ) {
                             Icon(Icons.Filled.Movie, null); Spacer(Modifier.width(6.dp)); Text("Export")
@@ -150,7 +160,11 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
         )
         ExportDialog(project.id)
         val hasPreview = project.clips.isNotEmpty()
-        val seek: (Long) -> Unit = { preview.seekTo(it) }
+        val openClip: (Int) -> Unit = { i ->
+            selectedClip = i
+            if (i > 0) vm.focusCut(i) else state.timeline.getOrNull(0)?.let { preview.playLoop(0, it.endMs) }
+        }
+        val manual: (Int) -> Boolean = { project.transitionOverrides.containsKey(it) }
         BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
             if (maxWidth > maxHeight) {
                 // Querformat: Einstellungen links, Vorschau + Timeline rechts
@@ -161,7 +175,7 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
                     Column(Modifier.weight(1f)) {
                         if (hasPreview) PreviewPane(preview, project, Modifier.fillMaxWidth().fillMaxHeight(0.55f).padding(top = 8.dp))
                         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            timelineSection(state, seek)
+                            timelineSection(state, manual, openClip)
                         }
                     }
                 }
@@ -171,7 +185,7 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
                     if (hasPreview) PreviewPane(preview, project, Modifier.fillMaxWidth().height(previewHeight).padding(top = 8.dp))
                     LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         settingsSections(project, state, vm, actions)
-                        timelineSection(state, seek)
+                        timelineSection(state, manual, openClip)
                     }
                 }
             }
@@ -441,17 +455,22 @@ private fun FormatStyleSection(project: Project, vm: EditorViewModel) {
 @Composable
 private fun CutButton(project: Project, state: EditorState, vm: EditorViewModel) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(
-            onClick = { vm.createCut() },
-            enabled = project.images.isNotEmpty() && state.analysisProgress == null && state.importingImages == 0 && state.analyzingFaces == 0,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) {
-            Icon(Icons.Filled.AutoAwesome, null); Spacer(Modifier.width(8.dp))
-            Text(if (state.timelineDirty) "Auto-Schnitt erstellen" else "Auto-Schnitt aktuell")
-        }
         if (project.clips.isNotEmpty()) {
-            OutlinedButton(onClick = { vm.createCut(reshuffle = true) }, modifier = Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.AutoAwesome, null, tint = Rgb.Green, modifier = Modifier.size(18.dp))
+                Text(
+                    "  Auto-Schnitt wird bei jeder Änderung sofort aktualisiert.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            OutlinedButton(onClick = vm::reshuffle, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.Casino, null); Spacer(Modifier.width(8.dp)); Text("Neu würfeln (andere Übergänge)")
+            }
+            if (project.transitionOverrides.isNotEmpty()) {
+                OutlinedButton(onClick = vm::resetManualTransitions, modifier = Modifier.fillMaxWidth()) {
+                    Text("${project.transitionOverrides.size} Handauswahl(en) zurücksetzen")
+                }
             }
         }
         if (project.music == null && project.images.isNotEmpty()) {
@@ -464,7 +483,7 @@ private fun CutButton(project: Project, state: EditorState, vm: EditorViewModel)
     }
 }
 
-private fun LazyListScope.timelineSection(state: EditorState, onClipClick: (Long) -> Unit) {
+private fun LazyListScope.timelineSection(state: EditorState, manual: (Int) -> Boolean, onClipClick: (Int) -> Unit) {
     if (state.timeline.isEmpty()) return
     item { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -475,15 +494,8 @@ private fun LazyListScope.timelineSection(state: EditorState, onClipClick: (Long
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (state.timelineDirty) {
-            Text(
-                "Einstellungen geändert – Auto-Schnitt neu erstellen, um sie zu übernehmen.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Rgb.Red,
-            )
-        }
         Text(
-            "Tippe auf einen Clip, um in der Vorschau dorthin zu springen.",
+            "Tippe auf einen Clip, um Übergang und Bildmodus zu bearbeiten.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -491,7 +503,7 @@ private fun LazyListScope.timelineSection(state: EditorState, onClipClick: (Long
     itemsIndexed(state.timeline, key = { _, t -> t.clip.id }) { i, t ->
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface)
-                .clickable { onClipClick(t.startMs) }.padding(8.dp),
+                .clickable { onClipClick(i) }.padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AsyncImage(
@@ -506,7 +518,8 @@ private fun LazyListScope.timelineSection(state: EditorState, onClipClick: (Long
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
-                    "Übergang: ${t.clip.transitionIn.type.label()}",
+                    (if (i == 0) "Start" else "Übergang: ${t.clip.transitionIn.type.label()}") +
+                        if (manual(i)) "  ✋" else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = familyColor(t.clip.transitionIn.type.family.ordinal),
                 )
@@ -530,7 +543,7 @@ private fun fitLabel(fit: FitMode?, resolved: FitMode?): String {
     }
 }
 
-private fun familyColor(ordinal: Int): Color = when (ordinal) {
+internal fun familyColor(ordinal: Int): Color = when (ordinal) {
     0 -> Rgb.Red
     1 -> Rgb.Blue
     2 -> Color(0xFFFFD60A)

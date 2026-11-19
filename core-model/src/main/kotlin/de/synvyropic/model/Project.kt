@@ -20,6 +20,8 @@ data class Project(
     val beatsPerCut: Int? = null,
     val lengthMode: LengthMode = LengthMode.FIT_IMAGES,
     val seed: Int = 1,
+    /** Von Hand gewählte Übergänge je Clip-Index; überstehen jeden neuen Auto-Schnitt. */
+    val transitionOverrides: Map<Int, Transition> = emptyMap(),
     val music: MusicTrack? = null,
     val clips: List<Clip> = emptyList(),
     val texts: List<TextOverlay> = emptyList(),
@@ -182,8 +184,34 @@ enum class TransitionType(val family: TransitionFamily) {
     LUMA_MORPH(TransitionFamily.SHAPE_WIPE),
 }
 
+/**
+ * Fortschreitende Übergänge (Wipes, Schwenks, Blenden) bekommen Easing.
+ * Alle anderen haben ihren Höhepunkt genau auf dem Beat (p = 0.5) und laufen linear.
+ */
+val TransitionType.isProgressive: Boolean
+    get() = this in setOf(
+        TransitionType.CROSSFADE, TransitionType.WHIP_PAN_LEFT, TransitionType.WHIP_PAN_RIGHT,
+        TransitionType.WHIP_PAN_UP, TransitionType.WHIP_PAN_DOWN, TransitionType.LIGHT_LEAK,
+        TransitionType.LENS_FLARE, TransitionType.CIRCLE_WIPE, TransitionType.LINE_WIPE,
+        TransitionType.ZIGZAG_WIPE, TransitionType.GRID_WIPE, TransitionType.DISSOLVE, TransitionType.LUMA_MORPH,
+    )
+
 @Serializable
-enum class Easing { LINEAR, EASE_IN, EASE_OUT, EASE_IN_OUT, EXPO_OUT, BACK_OUT }
+enum class Easing {
+    LINEAR, EASE_IN, EASE_OUT, EASE_IN_OUT, EXPO_OUT, BACK_OUT;
+
+    fun apply(p: Float): Float {
+        val x = p.coerceIn(0f, 1f)
+        return when (this) {
+            LINEAR -> x
+            EASE_IN -> x * x * x
+            EASE_OUT -> 1f - (1f - x) * (1f - x) * (1f - x)
+            EASE_IN_OUT -> if (x < 0.5f) 4f * x * x * x else 1f - (-2f * x + 2f).let { it * it * it } / 2f
+            EXPO_OUT -> if (x >= 1f) 1f else 1f - Math.pow(2.0, -10.0 * x).toFloat()
+            BACK_OUT -> { val c1 = 1.70158f; val c3 = c1 + 1f; 1f + c3 * (x - 1f).let { it * it * it } + c1 * (x - 1f).let { it * it } }
+        }
+    }
+}
 
 @Serializable
 data class Transition(

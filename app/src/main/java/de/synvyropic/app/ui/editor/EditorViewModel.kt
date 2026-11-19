@@ -21,7 +21,11 @@ import de.synvyropic.model.Styles
 import de.synvyropic.model.TimedClip
 import de.synvyropic.model.Timeline
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import de.synvyropic.model.Transition
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -38,10 +42,11 @@ data class EditorState(
     /** null = keine Analyse aktiv, sonst Fortschritt 0..1 */
     val analysisProgress: Float? = null,
     val timeline: List<TimedClip> = emptyList(),
-    /** Timeline passt nicht mehr zu den Einstellungen → neu erstellen. */
-    val timelineDirty: Boolean = true,
     val error: String? = null,
 )
+
+/** Bitte an die Vorschau: Bereich [startMs, endMs] in Schleife abspielen. */
+data class PreviewFocus(val startMs: Long, val endMs: Long)
 
 class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewModel(app) {
 
@@ -53,6 +58,9 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
     val state: StateFlow<EditorState> = _state.asStateFlow()
     private var analysisJob: Job? = null
 
+    private val _focus = MutableSharedFlow<PreviewFocus>(extraBufferCapacity = 4)
+    val focus: SharedFlow<PreviewFocus> = _focus.asSharedFlow()
+
     init {
         viewModelScope.launch {
             val p = repo.load(projectId) ?: repo.newProject("Projekt").copy(id = projectId)
@@ -60,7 +68,6 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
                 it.copy(
                     project = p,
                     timeline = Timeline.resolve(p),
-                    timelineDirty = p.clips.isEmpty(),
                     musicTitle = p.music?.let { m -> importer.audioTitle(File(m.uri)) ?: File(m.uri).name },
                     musicDurationMs = p.music?.let { m -> importer.audioDurationMs(File(m.uri)) } ?: 0,
                 )
@@ -82,15 +89,51 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
     }
 
     /** Darstellungsmodus eines Bildes durchschalten: Auto → Füllen → Blur → Schwenk → Auto. */
-    fun cycleFit(path: String) = change { p ->
-        val info = p.imageInfo[path] ?: return@change p
+    fun cycleFit(path: String) {
+        val info = project?.imageInfo?.get(path) ?: return
         val next = when (info.fit) {
             FitMode.AUTO -> FitMode.FILL
             FitMode.FILL -> FitMode.BLUR
             FitMode.BLUR -> FitMode.PAN
             FitMode.PAN -> FitMode.AUTO
         }
-        p.copy(imageInfo = p.imageInfo + (path to info.copy(fit = next)))
+        setFit(path, next)
+    }
+
+    fun setFit(path: String, mode: FitMode) {
+        change { p ->
+            val info = p.imageInfo[path] ?: return@change p
+            p.copy(imageInfo = p.imageInfo + (path to info.copy(fit = mode)))
+        }
+        // Vorschau: ersten Clip mit diesem Bild zeigen
+        _state.value.timeline.firstOrNull { it.clip.imageUri == path }?.let { focusClip(it) }
+    }
+
+    // ------------------------------------------------------------ Clip-Bearbeitung
+
+    /** Übergang in Clip [index] setzen; null = wieder automatisch. */
+    fun setTransition(index: Int, transition: Transition?) {
+        if (index <= 0) return
+        change { p ->
+            val o = if (transition == null) p.transitionOverrides - index else p.transitionOverrides + (index to transition)
+            p.copy(transitionOverrides = o)
+        }
+        focusCut(index)
+    }
+
+    fun isTransitionManual(index: Int) = project?.transitionOverrides?.containsKey(index) == true
+
+    /** Dauer eines Beats in ms (500 ms ohne Musik). */
+    fun beatMs(): Float = project?.music?.beats?.bpm?.takeIf { it > 0f }?.let { 60000f / it } ?: 500f
+
+    /** Vorschau auf die Schnittstelle vor Clip [index] setzen (Schleife ±1,2 s). */
+    fun focusCut(index: Int) {
+        val t = _state.value.timeline.getOrNull(index) ?: return
+        _focus.tryEmit(PreviewFocus((t.startMs - 1200).coerceAtLeast(0), t.startMs + 1200))
+    }
+
+    private fun focusClip(t: TimedClip) {
+        _focus.tryEmit(PreviewFocus((t.startMs - 300).coerceAtLeast(0), t.endMs + 300))
     }
 
     /** Tatsächlich verwendeter Modus (AUTO aufgelöst) für die Anzeige. */
@@ -102,10 +145,15 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
 
     private val project get() = _state.value.project
 
-    private fun change(dirty: Boolean = true, f: (Project) -> Project) {
+    /**
+     * Ändert das Projekt. Bei [recut] wird der Auto-Schnitt sofort neu berechnet,
+     * damit Timeline und Vorschau immer den aktuellen Stand zeigen.
+     */
+    private fun change(recut: Boolean = true, f: (Project) -> Project) {
         val p = project ?: return
-        val np = f(p).copy(updatedAt = System.currentTimeMillis())
-        _state.update { it.copy(project = np, timelineDirty = it.timelineDirty || dirty) }
+        var np = f(p).copy(updatedAt = System.currentTimeMillis())
+        if (recut) np = if (np.images.isEmpty()) np.copy(clips = emptyList()) else AutoCut.apply(np)
+        _state.update { it.copy(project = np, timeline = Timeline.resolve(np)) }
         viewModelScope.launch { repo.save(np) }
     }
 
@@ -174,15 +222,15 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
         p.copy(music = p.music?.copy(startMs = startMs, endMs = endMs))
     }
 
-    fun setFades(fadeInMs: Long, fadeOutMs: Long) = change(dirty = false) { p ->
+    fun setFades(fadeInMs: Long, fadeOutMs: Long) = change(recut = false) { p ->
         p.copy(music = p.music?.copy(fadeInMs = fadeInMs, fadeOutMs = fadeOutMs))
     }
 
-    fun setVolume(v: Float) = change(dirty = false) { p -> p.copy(music = p.music?.copy(volume = v)) }
+    fun setVolume(v: Float) = change(recut = false) { p -> p.copy(music = p.music?.copy(volume = v)) }
 
     // ------------------------------------------------------------ Format & Stil
 
-    fun setName(name: String) = change(dirty = false) { it.copy(name = name) }
+    fun setName(name: String) = change(recut = false) { it.copy(name = name) }
     fun setFormat(f: AspectFormat) = change { it.copy(format = f) }
     fun setStyle(id: String) = change { it.copy(styleId = id, beatsPerCut = null) }
     fun setBeatsPerCut(n: Int) = change { it.copy(beatsPerCut = n) }
@@ -190,17 +238,11 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
 
     // ------------------------------------------------------------ Auto-Schnitt
 
-    fun createCut(reshuffle: Boolean = false) {
-        val p = project ?: return
-        if (p.images.isEmpty()) {
-            _state.update { it.copy(error = "Bitte zuerst Bilder hinzufügen") }
-            return
-        }
-        val seeded = if (reshuffle) p.copy(seed = p.seed + 1) else p
-        val cut = AutoCut.apply(seeded).copy(updatedAt = System.currentTimeMillis())
-        _state.update { it.copy(project = cut, timeline = Timeline.resolve(cut), timelineDirty = false) }
-        viewModelScope.launch { repo.save(cut) }
-    }
+    /** Neu würfeln: andere zufällige Übergänge/Kamerafahrten (von Hand gewählte bleiben). */
+    fun reshuffle() = change { it.copy(seed = it.seed + 1) }
+
+    /** Alle von Hand gewählten Übergänge zurücksetzen. */
+    fun resetManualTransitions() = change { it.copy(transitionOverrides = emptyMap()) }
 
     fun dismissError() = _state.update { it.copy(error = null) }
 
