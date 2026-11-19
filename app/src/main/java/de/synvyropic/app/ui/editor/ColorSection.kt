@@ -30,7 +30,7 @@ import de.synvyropic.model.ColorGrade
 import de.synvyropic.model.ColorLooks
 import de.synvyropic.model.Project
 
-private val Yellow = Color(0xFFFFD60A)
+private val Yellow = de.synvyropic.app.ui.theme.Rgb.Orange
 
 private fun pct(v: Float) = (if (v > 0) "+" else "") + "${(v * 100).toInt()}"
 

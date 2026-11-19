@@ -13,6 +13,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import de.synvyropic.model.FitMode
 import de.synvyropic.model.FrameResolver
+import de.synvyropic.model.OverlayResolver
 import de.synvyropic.model.Project
 import kotlin.math.min
 
@@ -41,6 +42,7 @@ class Compositor(val width: Int, val height: Int) {
     private val black = ImageTexture.solid(0xFF000000.toInt())
 
     private var resolver: FrameResolver? = null
+    private val overlays = OverlayRenderer(width, height)
 
     // Farbe: Projekt-Look + 3D-LUT
     private var grade = ColorGrade()
@@ -72,6 +74,7 @@ class Compositor(val width: Int, val height: Int) {
     fun setProject(project: Project) {
         val r = FrameResolver(project)
         resolver = r
+        overlays.setProject(project, OverlayResolver(project, r.timed, r::envelope))
         grade = project.color
         projectParams = ColorLooks.resolve(grade)
         if (grade.lutPath != loadedLutPath) loadLut(grade.lutPath)
@@ -162,6 +165,8 @@ class Compositor(val width: Int, val height: Int) {
         postProgram.set1f("uLutAmount", if (lutLoaded) grade.lutIntensity.coerceIn(0f, 1f) else 0f)
         postProgram.set1f("uVignette", projectParams.vignette)
         quad.draw()
+        // Texte, Intro/Outro, Wasserzeichen (unabhängig vom Farb-Look)
+        overlays.render(tMs)
         return complete
     }
 
@@ -244,6 +249,7 @@ class Compositor(val width: Int, val height: Int) {
 
     fun release() {
         cache.release()
+        overlays.release()
         black.release()
         fboA.release(); fboB.release(); fboC.release()
         GLES30.glDeleteTextures(1, intArrayOf(lutTexture), 0)

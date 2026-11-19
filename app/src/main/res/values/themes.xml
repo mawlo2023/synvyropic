@@ -4,5 +4,8 @@
         <item name="android:windowBackground">@color/background</item>
         <item name="android:statusBarColor">@color/background</item>
         <item name="android:navigationBarColor">@color/background</item>
+        <!-- System-Splash (Android 12+): Logo-Symbol auf Nachtblau, danach animierter Logo-Start in der App -->
+        <item name="android:windowSplashScreenBackground">@color/icon_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
     </style>
 </resources>

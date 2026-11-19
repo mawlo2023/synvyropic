@@ -362,4 +362,44 @@ void main() {
     fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }
 """
+
+    /** Rechteck an beliebiger Stelle (für Texte/Logos). */
+    const val OVERLAY_VERTEX = """#version 300 es
+layout(location = 0) in vec2 aPos;
+uniform vec2 uCenter;
+uniform vec2 uHalf;
+out vec2 vUv;
+void main() {
+    vUv = vec2(aPos.x * 0.5 + 0.5, 0.5 - aPos.y * 0.5);
+    gl_Position = vec4(uCenter + aPos * uHalf, 0.0, 1.0);
+}
+"""
+
+    /** Text/Logo mit Deckkraft, Schreibmaschinen-Maske und Glitch (vormultipliertes Alpha). */
+    const val OVERLAY = """#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uTex;
+uniform float uAlpha;
+uniform float uReveal;
+uniform float uGlitch;
+uniform float uTime;
+void main() {
+    vec2 uv = vUv;
+    if (uGlitch > 0.001) {
+        float row = floor(uv.y * 12.0);
+        float h = fract(sin(row * 91.7 + floor(uTime * 20.0)) * 43758.5453);
+        if (h < uGlitch) uv.x += (h - 0.5) * 0.15 * uGlitch;
+    }
+    if (uv.x > uReveal) { fragColor = vec4(0.0); return; }
+    vec4 c = texture(uTex, uv);
+    if (uGlitch > 0.001) {
+        float o = 0.015 * uGlitch;
+        c.r = texture(uTex, uv + vec2(o, 0.0)).r;
+        c.b = texture(uTex, uv - vec2(o, 0.0)).b;
+    }
+    fragColor = c * uAlpha;
+}
+"""
 }

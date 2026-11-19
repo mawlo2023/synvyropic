@@ -37,6 +37,23 @@ class MediaImporter(private val context: Context) {
         out
     }
 
+    /** Logo (z. B. PNG mit Transparenz) als PNG speichern, max. 1024 px. */
+    suspend fun importLogo(uri: Uri, targetDir: File): File = withContext(Dispatchers.IO) {
+        val source = ImageDecoder.createSource(context.contentResolver, uri)
+        val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            val longest = max(info.size.width, info.size.height)
+            if (longest > 1024) {
+                val s = 1024f / longest
+                decoder.setTargetSize((info.size.width * s).toInt().coerceAtLeast(1), (info.size.height * s).toInt().coerceAtLeast(1))
+            }
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+        val out = File(targetDir, "logo_${UUID.randomUUID()}.png")
+        out.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
+        out
+    }
+
     suspend fun importAudio(uri: Uri, targetDir: File): File = withContext(Dispatchers.IO) {
         val ext = displayName(uri)?.substringAfterLast('.', "")?.takeIf { it.length in 2..5 } ?: "audio"
         targetDir.listFiles { f -> f.name.startsWith("music.") }?.forEach { it.delete() }

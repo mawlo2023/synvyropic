@@ -3,7 +3,7 @@
 > Android-App, die aus Einzelbildern und Musik automatisch beat-synchrone Reels und Slideshows
 > mit professionellen GPU-Übergängen erzeugt.
 >
-> Status: **v0.7 – M2 fertig, M3 (Farbe) in Arbeit** – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
+> Status: **v0.8 – M3 fertig, M4 (Text & Branding) in Arbeit** – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
 
 ---
 
@@ -65,8 +65,12 @@ Jeder Übergang hat: Dauer (in Beats oder ms), Intensität, Easing-Kurve; Glitch
 - Pipeline: Look + Regler im Clip-Pass (pro Bild), LUT + Vignette im Post-Pass.
 
 ### 3.5 Text-Overlays
-- Titel/Untertitel mit Schriftwahl, Farbe, Kontur/Schatten, Position.
-- Animationen: Fade, Slide, Pop/Scale, Typewriter, Glitch-Text; optional auf Beat getaktet.
+- **Titel am Anfang / Ende**: Titel + Untertitel über dem ersten bzw. letzten Bild, Bild wird abgedunkelt (regelbar), Dauer 1,5/2,5/4 s. Video wird nicht länger.
+- **Untertitel pro Bild** (Clip-Fenster), gemeinsamer Stil für alle Untertitel; erscheinen/verschwinden mit dem Bild.
+- **Freie Texte** an der aktuellen Vorschauposition, Zeitfenster per Schieberegler.
+- Stil: 6 Schriften, Größe, 8 Farben (Logo-Palette), Kontur + Farbe, Schatten, Position (oben/Mitte/unten + Höhe).
+- Animationen: Keine, Einblenden, Hochgleiten, Pop, Schreibmaschine, Glitch; optional „pulsiert im Takt“.
+- Texte liegen über dem Farb-Look (werden nicht mitgefärbt).
 
 ### 3.6 Musik
 - Ausschnitt wählen, Lautstärke, Fade-In/Fade-Out.
@@ -81,8 +85,8 @@ Jeder Übergang hat: Dauer (in Beats oder ms), Intensität, Easing-Kurve; Glitch
 - Projekt duplizieren, umbenennen, löschen, erneut exportieren.
 
 ### 3.8 Branding
-- **Eigenes Wasserzeichen**: Logo (Bild mit Transparenz) und/oder Text, Ecke wählbar, Deckkraft und Größe einstellbar, für jedes Projekt ein-/ausschaltbar.
-- **Intro-/Outro-Karte**: Titel + Untertitel, Hintergrundfarbe oder -bild, animiert (Pop, Glitch, Fade); Intro wird auf den ersten Beat bzw. Drop getaktet.
+- **Wasserzeichen**: Logo (PNG mit Transparenz) und/oder Text, Ecke, Deckkraft, Logo-/Textgröße; pro Projekt ein/aus.
+- **App-Design**: Synvyropic-Logo als animierter Startbildschirm und App-Symbol; Farben aus dem Logo (Cyan → Blau → Violett → Magenta, Orange-Akzent auf Nachtblau).
 
 ### 3.9 Export
 | Format | Auflösung | Hinweis |
@@ -151,8 +155,8 @@ Ein Stil ist eine Regelmenge: Schnittraster, Übergangspool (gewichtet), Effekt 
 | **M1b – Vorschau & Export** ✅ | GL-Vorschau oben im Editor (Play/Pause/Spulen, Clip antippen = springen), Export 1080p30 nach Filme/Synvyropic, Ken Burns, Musik-Fades, **alle 28 Übergänge als erster Wurf**, Beat-Effekte (Puls, RGB-Puls, VHS) | **Erstes echtes beat-synchrones Video** |
 | **M1c – Gesichter & Videos** ✅ | Gesichtserkennung mit Füllen/Blur/Schwenk pro Bild, Videoliste | Niemand wird abgeschnitten |
 | **M2 – Effekt-Engine** ✅ | Live-Auto-Schnitt bei jeder Änderung, Vorschau spielt geänderte Stelle in Schleife, Clip-Fenster (Übergang nach Familie, Dauer in Beats, Intensität, Beat-Kopplung, Farbe, Richtung, Bildmodus), Handauswahl übersteht Neuberechnung, Easing für fortschreitende Übergänge, Versionsanzeige | Profi-Übergänge |
-| **M3 – Farbe** | Looks, Projekt-Regler, LUT-Import, Korrektur pro Bild, sofortige Vorschau | Color Grading wie in Profi-Apps |
-| **M4 – Editor & Text** | Feinschliff-Editor pro Clip, Text-Overlays, Wasserzeichen, Intro/Outro, Projektverwaltung, Stil-Presets | Vollständiger MVP |
+| **M3 – Farbe** ✅ | Looks, Projekt-Regler, LUT-Import, Korrektur pro Bild, sofortige Vorschau | Color Grading wie in Profi-Apps |
+| **M4 – Text & Branding** | Feinschliff-Editor pro Clip, Text-Overlays, Wasserzeichen, Intro/Outro, Projektverwaltung, Stil-Presets | Vollständiger MVP |
 | **M5 – Feinschliff** | 4K, HEVC, 60 fps, Performance, Musik-Wellenform-Editor | Version 1.0 |
 
 ## 7. Qualitätsziele

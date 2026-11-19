@@ -124,7 +124,7 @@ object AutoCut {
     }
 
     /** RGB-Akzentfarben für Farb-Flashes. */
-    private val flashColors = longArrayOf(0xFFFF2D55, 0xFF2DFFB4, 0xFF2D7DFF, 0xFFFFD60A, 0xFFB44DFF)
+    private val flashColors = longArrayOf(0xFF27D3FF, 0xFF3D7BFF, 0xFF9B4DFF, 0xFFE445E6, 0xFFFF8A3D)
 
     private fun transition(type: TransitionType, durationMs: Long, style: Style, intensity: Float = 0.8f, rnd: Random = Random(type.ordinal)) =
         Transition(

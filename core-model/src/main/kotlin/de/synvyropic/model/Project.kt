@@ -20,6 +20,8 @@ data class Project(
     val beatsPerCut: Int? = null,
     val lengthMode: LengthMode = LengthMode.FIT_IMAGES,
     val seed: Int = 1,
+    /** Stil aller Bild-Untertitel (Text steht in ImageInfo.caption). */
+    val captionStyle: TextStyle = TextStyle.CAPTION,
     /** Von Hand gewählte Übergänge je Clip-Index; überstehen jeden neuen Auto-Schnitt. */
     val transitionOverrides: Map<Int, Transition> = emptyMap(),
     val music: MusicTrack? = null,
@@ -134,6 +136,8 @@ data class ImageInfo(
     val fit: FitMode = FitMode.AUTO,
     /** Farbkorrektur nur für dieses Bild (wirkt zusätzlich zum Projekt-Look). */
     val color: ColorGrade? = null,
+    /** Untertitel, solange dieses Bild zu sehen ist. */
+    val caption: String? = null,
 )
 
 @Serializable
@@ -266,20 +270,39 @@ data class ColorGrade(
 enum class TextAnimation { NONE, FADE, SLIDE_UP, POP, TYPEWRITER, GLITCH }
 
 @Serializable
+enum class TextFont { SANS_BOLD, SANS, BLACK, CONDENSED, SERIF, MONO }
+
+/**
+ * Aussehen eines Textes. Größe in Pixeln bezogen auf 1080 px Videobreite;
+ * Position = Textmitte, normiert (0..1, y nach unten).
+ */
+@Serializable
+data class TextStyle(
+    val font: TextFont = TextFont.SANS_BOLD,
+    val size: Float = 64f,
+    val colorArgb: Long = 0xFFFFFFFF,
+    val outlineArgb: Long? = null,
+    val shadow: Boolean = true,
+    val x: Float = 0.5f,
+    val y: Float = 0.5f,
+    val animation: TextAnimation = TextAnimation.FADE,
+    val syncToBeat: Boolean = false,
+) {
+    companion object {
+        val TITLE = TextStyle(font = TextFont.BLACK, size = 110f, y = 0.42f, animation = TextAnimation.POP)
+        val CAPTION = TextStyle(font = TextFont.SANS_BOLD, size = 52f, y = 0.86f, animation = TextAnimation.SLIDE_UP)
+        val FREE = TextStyle(size = 72f, y = 0.5f, animation = TextAnimation.POP)
+    }
+}
+
+/** Frei platzierter Text mit eigener Zeit. */
+@Serializable
 data class TextOverlay(
     val id: String,
     val text: String,
     val startMs: Long,
     val endMs: Long,
-    val fontId: String = "default",
-    val sizeSp: Float = 48f,
-    val colorArgb: Long = 0xFFFFFFFF,
-    val outlineArgb: Long? = 0xFF000000,
-    val shadow: Boolean = true,
-    val x: Float = 0.5f,
-    val y: Float = 0.8f,
-    val animation: TextAnimation = TextAnimation.FADE,
-    val syncToBeat: Boolean = false,
+    val style: TextStyle = TextStyle.FREE,
 )
 
 @Serializable
@@ -291,17 +314,20 @@ data class Watermark(
     val imageUri: String? = null,
     val text: String? = null,
     val corner: Corner = Corner.BOTTOM_RIGHT,
-    val opacity: Float = 0.7f,
-    val scale: Float = 0.15f,
+    val opacity: Float = 0.75f,
+    /** Logobreite als Anteil der Videobreite. */
+    val scale: Float = 0.16f,
+    /** Textgröße (px bei 1080 Breite). */
+    val textSize: Float = 38f,
 )
 
-/** Intro- bzw. Outro-Karte. */
+/** Intro-/Outro-Titel über dem ersten bzw. letzten Bild (das abgedunkelt wird). */
 @Serializable
 data class TitleCard(
     val title: String,
     val subtitle: String? = null,
     val durationMs: Long = 2500,
-    val backgroundArgb: Long = 0xFF000000,
-    val backgroundImageUri: String? = null,
-    val animation: TextAnimation = TextAnimation.POP,
+    val style: TextStyle = TextStyle.TITLE,
+    /** Abdunkelung des Bildes darunter 0..1. */
+    val dim: Float = 0.35f,
 )

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="background">#FF0B0B12</color>
-    <color name="icon_background">#FF0B0B12</color>
+    <!-- Farben aus dem Synvyropic-Logo -->
+    <color name="background">#FF05060F</color>
+    <color name="icon_background">#FF01010C</color>
 </resources>

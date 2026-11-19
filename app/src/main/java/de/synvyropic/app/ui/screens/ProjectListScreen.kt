@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MovieFilter
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -71,6 +73,13 @@ fun ProjectListScreen(onOpen: (String) -> Unit, onVideos: () -> Unit, vm: Projec
     Scaffold(
         topBar = {
             TopAppBar(title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(R.mipmap.ic_launcher_foreground),
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)),
+                )
+                Spacer(Modifier.width(12.dp))
                 Column {
                     Text(stringResource(R.string.projects_title), fontWeight = FontWeight.Bold)
                     Text(
@@ -78,6 +87,7 @@ fun ProjectListScreen(onOpen: (String) -> Unit, onVideos: () -> Unit, vm: Projec
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
                 }
             })
         },

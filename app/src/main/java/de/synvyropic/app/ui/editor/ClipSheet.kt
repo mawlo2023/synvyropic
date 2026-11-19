@@ -57,7 +57,7 @@ private fun TransitionFamily.label() = when (this) {
     TransitionFamily.SHAPE_WIPE -> "Formen"
 }
 
-private val flashColors = listOf(0xFFFFFFFF, 0xFFFF2D55, 0xFF2DFFB4, 0xFF2D7DFF, 0xFFFFD60A, 0xFFB44DFF)
+private val flashColors = listOf(0xFFFFFFFF, 0xFF27D3FF, 0xFF3D7BFF, 0xFF9B4DFF, 0xFFE445E6, 0xFFFF8A3D)
 
 /** Bearbeitung eines Clips: Bildmodus und Übergang hinein. Jede Änderung spielt die Stelle in der Vorschau ab. */
 @Composable
@@ -94,6 +94,19 @@ fun ClipSheet(index: Int, state: EditorState, vm: EditorViewModel, onDismiss: ()
                         FilterChip(selected = info.fit == m, onClick = { vm.setFit(clip.imageUri, m) }, label = { Text(l) })
                     }
                 }
+            }
+
+            // ---------------- Untertitel dieses Bildes
+            if (info != null) {
+                var caption by remember(clip.imageUri) { mutableStateOf(info.caption.orEmpty()) }
+                androidx.compose.material3.OutlinedTextField(
+                    value = caption,
+                    onValueChange = { caption = it; vm.setCaption(clip.imageUri, it) },
+                    label = { Text("Untertitel (z. B. Ort, Datum)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                HorizontalDivider()
             }
 
             // ---------------- Farbkorrektur nur für dieses Bild

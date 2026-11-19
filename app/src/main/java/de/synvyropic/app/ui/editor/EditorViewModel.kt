@@ -26,6 +26,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import de.synvyropic.model.Transition
+import de.synvyropic.model.TextOverlay
+import de.synvyropic.model.TextStyle
+import de.synvyropic.model.TitleCard
+import de.synvyropic.model.Watermark
 import de.synvyropic.model.ColorGrade
 import de.synvyropic.model.CubeLut
 import kotlinx.coroutines.Dispatchers
@@ -273,6 +277,72 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
     fun removeLut() {
         val old = project?.color?.lutPath
         updateColor { it.copy(lutPath = null, lutName = null) }
+        old?.let { File(it).delete() }
+    }
+
+    // ------------------------------------------------------------ Text & Branding
+
+    private val duration get() = _state.value.timeline.lastOrNull()?.endMs ?: 0L
+
+    fun setIntro(card: TitleCard?) {
+        change(recut = false) { it.copy(intro = card) }
+        card?.let { _focus.tryEmit(PreviewFocus(0, it.durationMs.coerceAtMost(duration))) }
+    }
+
+    fun setOutro(card: TitleCard?) {
+        change(recut = false) { it.copy(outro = card) }
+        card?.let { _focus.tryEmit(PreviewFocus((duration - it.durationMs - 300).coerceAtLeast(0), duration)) }
+    }
+
+    fun setCaption(path: String, text: String) = change(recut = false) { p ->
+        val info = p.imageInfo[path] ?: return@change p
+        p.copy(imageInfo = p.imageInfo + (path to info.copy(caption = text.ifBlank { null })))
+    }
+
+    fun setCaptionStyle(style: TextStyle) {
+        change(recut = false) { it.copy(captionStyle = style) }
+        // ersten Clip mit Untertitel zeigen
+        val p = project ?: return
+        _state.value.timeline.firstOrNull { p.imageInfo[it.clip.imageUri]?.caption != null }?.let { focusClip(it) }
+    }
+
+    /** Neuen Text an Position [atMs] anlegen; liefert seine ID. */
+    fun addText(atMs: Long): String {
+        val id = java.util.UUID.randomUUID().toString()
+        val start = atMs.coerceIn(0, (duration - 500).coerceAtLeast(0))
+        val end = (start + 2500).coerceAtMost(duration.coerceAtLeast(start + 500))
+        change(recut = false) { it.copy(texts = it.texts + TextOverlay(id, "Dein Text", start, end)) }
+        _focus.tryEmit(PreviewFocus(start, end))
+        return id
+    }
+
+    fun updateText(id: String, f: (TextOverlay) -> TextOverlay) {
+        var updated: TextOverlay? = null
+        change(recut = false) { p -> p.copy(texts = p.texts.map { if (it.id == id) f(it).also { n -> updated = n } else it }) }
+        updated?.let { _focus.tryEmit(PreviewFocus(it.startMs, it.endMs)) }
+    }
+
+    fun removeText(id: String) = change(recut = false) { p -> p.copy(texts = p.texts.filterNot { it.id == id }) }
+
+    fun setWatermark(w: Watermark?) = change(recut = false) { it.copy(watermark = w) }
+
+    /** Logo fürs Wasserzeichen importieren (Transparenz bleibt als PNG erhalten). */
+    fun importWatermarkLogo(uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val file = importer.importLogo(uri, repo.mediaDir(projectId))
+                val old = project?.watermark?.imageUri
+                change(recut = false) { it.copy(watermark = (it.watermark ?: Watermark()).copy(imageUri = file.absolutePath)) }
+                old?.let { File(it).delete() }
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "Logo konnte nicht geladen werden: ${e.message}") }
+            }
+        }
+    }
+
+    fun removeWatermarkLogo() {
+        val old = project?.watermark?.imageUri
+        change(recut = false) { it.copy(watermark = it.watermark?.copy(imageUri = null)) }
         old?.let { File(it).delete() }
     }
 

@@ -107,7 +107,8 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
     val previewError by preview.error.collectAsState()
     LaunchedEffect(previewError) { previewError?.let { snackbar.showSnackbar(it) } }
     // Vorschau bekommt jede neue Timeline
-    LaunchedEffect(state.project?.clips, state.project?.music, state.project?.format, state.project?.color) {
+    // Jede Projektänderung (Schnitt, Farbe, Texte, Wasserzeichen …) sofort an die Vorschau
+    LaunchedEffect(state.project) {
         state.project?.takeIf { it.clips.isNotEmpty() }?.let(preview::setProject)
     }
     // Änderungen sofort in der Vorschau zeigen: betroffenen Bereich in Schleife abspielen
@@ -130,6 +131,9 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
     }
     val pickLut = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let(vm::importLut)
+    }
+    val pickLogo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
+        uri?.let(vm::importWatermarkLogo)
     }
 
     Scaffold(
@@ -162,6 +166,8 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
             pickMusic = { pickMusic.launch(arrayOf("audio/*")) },
             // .cube hat keinen festen MIME-Typ → alle Dateien zulassen, Prüfung beim Import
             pickLut = { pickLut.launch(arrayOf("*/*")) },
+            pickLogo = { pickLogo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            currentTime = { preview.position.value },
         )
         ExportDialog(project.id)
         val hasPreview = project.clips.isNotEmpty()
@@ -203,6 +209,8 @@ private class EditorActions(
     val pickGooglePhotos: () -> Unit,
     val pickMusic: () -> Unit,
     val pickLut: () -> Unit,
+    val pickLogo: () -> Unit,
+    val currentTime: () -> Long,
 )
 
 private fun LazyListScope.settingsSections(project: Project, state: EditorState, vm: EditorViewModel, a: EditorActions) {
@@ -211,6 +219,7 @@ private fun LazyListScope.settingsSections(project: Project, state: EditorState,
     item { MusicSection(project, state, vm, a) }
     item { FormatStyleSection(project, vm) }
     item { ColorSection(project, vm, a.pickLut) }
+    item { TextSection(project, vm, a.currentTime, a.pickLogo) }
     item { CutButton(project, state, vm) }
 }
 
@@ -557,7 +566,7 @@ private fun fitLabel(fit: FitMode?, resolved: FitMode?): String {
 internal fun familyColor(ordinal: Int): Color = when (ordinal) {
     0 -> Rgb.Red
     1 -> Rgb.Blue
-    2 -> Color(0xFFFFD60A)
+    2 -> Rgb.Orange
     3 -> Rgb.Green
     else -> Color(0xFFA9A9BC)
 }
