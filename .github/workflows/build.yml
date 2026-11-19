@@ -37,7 +37,7 @@ jobs:
           fi
 
       - name: Tests
-        run: ./gradlew --no-daemon :core-model:test
+        run: ./gradlew --no-daemon :core-model:test :audio:test
 
       - name: APK bauen
         env:
