@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.synvyropic.app.ui.theme.Rgb
+import de.synvyropic.model.ColorGrade
 import de.synvyropic.model.FitMode
 import de.synvyropic.model.Transition
 import de.synvyropic.model.TransitionFamily
@@ -93,6 +94,19 @@ fun ClipSheet(index: Int, state: EditorState, vm: EditorViewModel, onDismiss: ()
                         FilterChip(selected = info.fit == m, onClick = { vm.setFit(clip.imageUri, m) }, label = { Text(l) })
                     }
                 }
+            }
+
+            // ---------------- Farbkorrektur nur für dieses Bild
+            if (info != null) {
+                val ic = info.color ?: ColorGrade()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Farbkorrektur dieses Bildes", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                    if (info.color != null) {
+                        androidx.compose.material3.TextButton(onClick = { vm.setImageColor(clip.imageUri, null) }) { Text("Zurücksetzen") }
+                    }
+                }
+                ColorSliders(ic, includeVignette = false) { f -> vm.setImageColor(clip.imageUri, f(ic)) }
+                HorizontalDivider()
             }
 
             if (index == 0) {

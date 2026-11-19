@@ -35,10 +35,11 @@ object AutoCut {
         val clips = r.clips.mapIndexed { i, c ->
             project.transitionOverrides[i]?.takeIf { i > 0 }?.let { c.copy(transitionIn = it) } ?: c
         }
+        // Bildkorrekturen in die Clips übernehmen (überstehen so jeden Neuschnitt)
+        val colored = clips.map { c -> project.imageInfo[c.imageUri]?.color?.let { c.copy(color = it) } ?: c }
         return project.copy(
-            clips = clips,
+            clips = colored,
             music = project.music?.copy(startMs = r.musicStartMs),
-            color = project.color.copy(presetId = style.colorPresetId),
         )
     }
 

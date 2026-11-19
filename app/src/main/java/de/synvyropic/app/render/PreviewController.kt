@@ -219,6 +219,7 @@ class PreviewController(context: Context) {
                 } else if (newProject != null) {
                     compositor!!.setProject(p)
                 }
+                if (newProject != null) compositor!!.lutError?.let { w -> main.post { _error.value = w } }
                 val complete = compositor!!.render(currentTime(), vw, vh, blocking = false)
                 if (!complete && !isPlaying) view.postDelayed({ view.requestRender() }, 50)
             } catch (e: ShaderException) {

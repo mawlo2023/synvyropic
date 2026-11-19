@@ -132,6 +132,8 @@ data class ImageInfo(
     val faces: List<FaceBox> = emptyList(),
     /** Vom Nutzer gewählter Modus; AUTO = App entscheidet. */
     val fit: FitMode = FitMode.AUTO,
+    /** Farbkorrektur nur für dieses Bild (wirkt zusätzlich zum Projekt-Look). */
+    val color: ColorGrade? = null,
 )
 
 @Serializable
@@ -235,17 +237,30 @@ data class ClipEffect(
     val beatReactive: Boolean = true,
 )
 
+/**
+ * Farbbearbeitung. Regler-Werte -1..1 (0 = neutral), Vignette 0..1.
+ * Auf Projektebene: Look + Regler + LUT. Pro Bild (ImageInfo.color): nur Korrektur-Regler.
+ */
 @Serializable
 data class ColorGrade(
     val presetId: String? = null,
+    /** Stärke des Looks 0..1. */
+    val presetAmount: Float = 1f,
     /** Pfad zu importierter .cube-LUT im App-Speicher. */
     val lutPath: String? = null,
+    val lutName: String? = null,
     val lutIntensity: Float = 1f,
     val brightness: Float = 0f,
     val contrast: Float = 0f,
     val saturation: Float = 0f,
     val temperature: Float = 0f,
-)
+    val tint: Float = 0f,
+    val vignette: Float = 0f,
+) {
+    val isNeutral: Boolean
+        get() = presetId == null && lutPath == null && brightness == 0f && contrast == 0f &&
+            saturation == 0f && temperature == 0f && tint == 0f && vignette == 0f
+}
 
 @Serializable
 enum class TextAnimation { NONE, FADE, SLIDE_UP, POP, TYPEWRITER, GLITCH }

@@ -10,6 +10,8 @@ data class ClipState(
     val centerX: Float,
     val centerY: Float,
     val fit: FitMode = FitMode.FILL,
+    /** Farbkorrektur dieses Bildes (zusätzlich zum Projekt-Look). */
+    val color: ColorGrade? = null,
 )
 
 /**
@@ -95,7 +97,7 @@ class FrameResolver(project: Project, private val beatDecayMs: Float = 140f) {
     private fun state(k: Int, t: Long): ClipState {
         val tc = timed[k]
         val m = tc.clip.motion
-        if (!m.enabled) return ClipState(k, tc.clip.imageUri, 1f, 0.5f, 0.5f, tc.clip.fit)
+        if (!m.enabled) return ClipState(k, tc.clip.imageUri, 1f, 0.5f, 0.5f, tc.clip.fit, tc.clip.color)
         val dIn = if (k > 0) activeDuration(tc.clip) / 2 else 0
         val dOut = if (k + 1 < timed.size) activeDuration(timed[k + 1].clip) / 2 else 0
         val s = tc.startMs - dIn
@@ -108,6 +110,7 @@ class FrameResolver(project: Project, private val beatDecayMs: Float = 140f) {
             centerX = lerp(m.startCenterX, m.endCenterX, u),
             centerY = lerp(m.startCenterY, m.endCenterY, u),
             fit = tc.clip.fit,
+            color = tc.clip.color,
         )
     }
 

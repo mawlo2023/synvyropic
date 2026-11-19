@@ -2,7 +2,15 @@ package de.synvyropic.app.render
 
 import android.opengl.GLES30
 import de.synvyropic.model.ClipEffectType
+import android.util.Half
 import de.synvyropic.model.ClipState
+import de.synvyropic.model.ColorGrade
+import de.synvyropic.model.ColorLooks
+import de.synvyropic.model.ColorParams
+import de.synvyropic.model.CubeLut
+import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import de.synvyropic.model.FitMode
 import de.synvyropic.model.FrameResolver
 import de.synvyropic.model.Project
@@ -34,6 +42,18 @@ class Compositor(val width: Int, val height: Int) {
 
     private var resolver: FrameResolver? = null
 
+    // Farbe: Projekt-Look + 3D-LUT
+    private var grade = ColorGrade()
+    private var projectParams = ColorParams()
+    private val lutTexture: Int = IntArray(1).also { GLES30.glGenTextures(1, it, 0) }[0]
+    private var lutSize = 2f
+    private var loadedLutPath: String? = null
+    private var lutLoaded = false
+
+    /** Gesetzt, wenn die LUT-Datei nicht gelesen werden konnte. */
+    var lutError: String? = null
+        private set
+
     init {
         var prog: GlProgram
         var fallback = false
@@ -46,11 +66,15 @@ class Compositor(val width: Int, val height: Int) {
         }
         transitionProgram = prog
         fallbackTransition = fallback
+        uploadLut(CubeLut.identity(2))
     }
 
     fun setProject(project: Project) {
         val r = FrameResolver(project)
         resolver = r
+        grade = project.color
+        projectParams = ColorLooks.resolve(grade)
+        if (grade.lutPath != loadedLutPath) loadLut(grade.lutPath)
         r.neededAround(0).forEach { cache.prefetch(r.timed[it].clip.imageUri) }
     }
 
@@ -131,6 +155,12 @@ class Compositor(val width: Int, val height: Int) {
         postProgram.set1f("uRgbPulse", if (effect?.type == ClipEffectType.RGB_SHIFT_PULSE) min(1f, env * intensity * 2f) else 0f)
         postProgram.set1f("uBright", if (effect?.type == ClipEffectType.BEAT_PULSE) env * intensity else 0f)
         postProgram.set1f("uVhs", if (effect?.type == ClipEffectType.VHS_OVERLAY) intensity else 0f)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_3D, lutTexture)
+        postProgram.set1i("uLut", 1)
+        postProgram.set1f("uLutSize", lutSize)
+        postProgram.set1f("uLutAmount", if (lutLoaded) grade.lutIntensity.coerceIn(0f, 1f) else 0f)
+        postProgram.set1f("uVignette", projectParams.vignette)
         quad.draw()
         return complete
     }
@@ -148,6 +178,11 @@ class Compositor(val width: Int, val height: Int) {
         val coverY: Float
         if (imageAspect > outAspect) { coverX = outAspect / imageAspect; coverY = 1f } else { coverX = 1f; coverY = imageAspect / outAspect }
         val zoom = (state.scale * extraZoom).coerceAtLeast(1f)
+        val c = if (state.color == null) projectParams else ColorLooks.resolve(grade, state.color)
+        clipProgram.set4f("uG1", c.brightness, c.contrast, c.saturation, c.temperature)
+        clipProgram.set3f("uG2", c.tint, c.fade, if (c.isIdentity) 0f else 1f)
+        clipProgram.set3f("uShadow", c.shadowTint.r, c.shadowTint.g, c.shadowTint.b)
+        clipProgram.set3f("uHigh", c.highlightTint.r, c.highlightTint.g, c.highlightTint.b)
         if (state.fit == FitMode.BLUR) {
             // „Contain“: ganzes Bild sichtbar (Span ≥ 1), Rand = unscharfer Hintergrund
             val containX = coverX / minOf(coverX, coverY)
@@ -168,6 +203,40 @@ class Compositor(val width: Int, val height: Int) {
         quad.draw()
     }
 
+    private fun loadLut(path: String?) {
+        loadedLutPath = path
+        lutLoaded = false
+        lutError = null
+        if (path == null) return
+        try {
+            uploadLut(CubeLut.parse(File(path).readText()))
+            lutLoaded = true
+        } catch (e: Exception) {
+            lutError = "LUT konnte nicht geladen werden: ${e.message}"
+            uploadLut(CubeLut.identity(2))
+        }
+    }
+
+    /** 3D-LUT als RGB16F-Textur hochladen. */
+    private fun uploadLut(lut: CubeLut) {
+        val buf = ByteBuffer.allocateDirect(lut.data.size * 2).order(ByteOrder.nativeOrder()).asShortBuffer()
+        for (v in lut.data) buf.put(Half.toHalf(v))
+        buf.position(0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_3D, lutTexture)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, GLES30.GL_TEXTURE_WRAP_R, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
+        GLES30.glTexImage3D(
+            GLES30.GL_TEXTURE_3D, 0, GLES30.GL_RGB16F, lut.size, lut.size, lut.size, 0,
+            GLES30.GL_RGB, GLES30.GL_HALF_FLOAT, buf,
+        )
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+        lutSize = lut.size.toFloat()
+    }
+
     private fun bindTexture(unit: Int, id: Int) {
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + unit)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id)
@@ -177,6 +246,7 @@ class Compositor(val width: Int, val height: Int) {
         cache.release()
         black.release()
         fboA.release(); fboB.release(); fboC.release()
+        GLES30.glDeleteTextures(1, intArrayOf(lutTexture), 0)
         clipProgram.release(); postProgram.release(); transitionProgram.release()
         quad.release()
     }

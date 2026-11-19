@@ -27,6 +27,26 @@ uniform vec2 uCenter;
 uniform vec2 uSpan;
 uniform int uMode;       // 0 = füllend, 1 = ganzes Bild mit Blur-Rand
 uniform vec2 uBgSpan;    // Ausschnitt des Hintergrunds (füllend, zentriert)
+uniform vec4 uG1;        // Helligkeit, Kontrast, Sättigung, Wärme (-1..1)
+uniform vec3 uG2;        // Tönung, Fade (0..0.3), aktiv (0/1)
+uniform vec3 uShadow;    // Split-Toning Schatten
+uniform vec3 uHigh;      // Split-Toning Lichter
+
+vec3 grade(vec3 c) {
+    if (uG2.z < 0.5) return c;
+    c += uG1.x * 0.25;
+    c = (c - 0.5) * (1.0 + uG1.y) + 0.5;
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 1.0 + uG1.z);
+    c.r += uG1.w * 0.08;
+    c.b -= uG1.w * 0.08;
+    c.g += uG2.x * 0.06;
+    float lt = clamp(l, 0.0, 1.0);
+    c += uShadow * (1.0 - smoothstep(0.0, 0.6, lt)) + uHigh * smoothstep(0.4, 1.0, lt);
+    c = uG2.y + c * (1.0 - uG2.y);
+    return clamp(c, 0.0, 1.0);
+}
+
 void main() {
     vec2 st = vec2(vUv.x, 1.0 - vUv.y);
     vec2 uv = uCenter + (st - 0.5) * uSpan;
@@ -39,10 +59,10 @@ void main() {
                + textureLod(uTex, bg + vec2(-d.x, d.y), 5.5).rgb * 0.15
                + textureLod(uTex, bg + vec2(d.x, -d.y), 5.5).rgb * 0.15
                + textureLod(uTex, bg + vec2(-d.x, -d.y), 5.5).rgb * 0.15;
-        fragColor = vec4(c * 0.6, 1.0);
+        fragColor = vec4(grade(c) * 0.6, 1.0);
         return;
     }
-    fragColor = vec4(texture(uTex, uv).rgb, 1.0);
+    fragColor = vec4(grade(texture(uTex, uv).rgb), 1.0);
 }
 """
 
@@ -307,6 +327,10 @@ uniform float uTime;
 uniform float uRgbPulse;   // RGB-Verschiebung (0..1)
 uniform float uBright;     // Helligkeitspuls (0..1)
 uniform float uVhs;        // VHS-Overlay (0..1)
+uniform highp sampler3D uLut;
+uniform float uLutAmount;  // 0 = keine LUT
+uniform float uLutSize;
+uniform float uVignette;   // 0..1
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
@@ -320,6 +344,14 @@ void main() {
                    texture(uTex, uv - vec2(off, 0.0)).b);
     } else {
         col = texture(uTex, uv).rgb;
+    }
+    if (uLutAmount > 0.001) {
+        vec3 lc = clamp(col, 0.0, 1.0) * ((uLutSize - 1.0) / uLutSize) + 0.5 / uLutSize;
+        col = mix(col, texture(uLut, lc).rgb, uLutAmount);
+    }
+    if (uVignette > 0.001) {
+        float d = length((uv - 0.5) * vec2(uRes.x / uRes.y, 1.0)) / length(vec2(0.5 * uRes.x / uRes.y, 0.5));
+        col *= 1.0 - uVignette * 0.85 * smoothstep(0.35, 1.0, d);
     }
     if (uVhs > 0.001) {
         col *= 1.0 - 0.08 * uVhs * step(0.5, fract(uv.y * uRes.y * 0.25));

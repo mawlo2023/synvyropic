@@ -3,7 +3,7 @@
 > Android-App, die aus Einzelbildern und Musik automatisch beat-synchrone Reels und Slideshows
 > mit professionellen GPU-Übergängen erzeugt.
 >
-> Status: **v0.6 – M2 in Arbeit (Live-Vorschau, Clip-Bearbeitung)** – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
+> Status: **v0.7 – M2 fertig, M3 (Farbe) in Arbeit** – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
 
 ---
 
@@ -58,9 +58,11 @@ Jeder Übergang hat: Dauer (in Beats oder ms), Intensität, Easing-Kurve; Glitch
 - Auto: passen alle Gesichter in den Ausschnitt → Füllen; knapp zu breit (≤ 1,8×) → Schwenk; weit verteilte Gruppe → Blur.
 
 ### 3.4 Farbe
-- Presets: Cinematic, Teal & Orange, Vintage, S/W, Warm, Cool, High Contrast, Faded.
-- **LUT-Import**: `.cube`-Dateien (3D-LUT bis 64³) → 3D-Textur; Intensitätsregler.
-- Basisregler: Helligkeit, Kontrast, Sättigung, Temperatur.
+- **Looks** (9): Cinematic, Teal & Orange, Vintage, Schwarzweiß, Warm, Kühl, Kontrast, Verblasst, Neon – mit Regler „Stärke des Looks“. Der Stil schlägt einen Look vor, danach frei änderbar.
+- **Projekt-Regler**: Helligkeit, Kontrast, Sättigung, Wärme, Vignette.
+- **LUT-Import**: `.cube`-Dateien (3D-LUT bis 128³, mit DOMAIN_MIN/MAX) → RGB16F-3D-Textur; Intensitätsregler.
+- **Korrektur pro Bild** (Clip-Fenster): Helligkeit, Kontrast, Sättigung, Wärme – zusätzlich zum Projekt-Look, übersteht jeden Neuschnitt.
+- Pipeline: Look + Regler im Clip-Pass (pro Bild), LUT + Vignette im Post-Pass.
 
 ### 3.5 Text-Overlays
 - Titel/Untertitel mit Schriftwahl, Farbe, Kontur/Schatten, Position.
@@ -148,8 +150,8 @@ Ein Stil ist eine Regelmenge: Schnittraster, Übergangspool (gewichtet), Effekt 
 | **M1a – Medien & Beats** ✅ | Bild-/Musikauswahl (inkl. Google Fotos), Beat-Analyse mit Visualisierung, Auto-Schnitt mit 4 Stilen, Projekte speichern | Timeline steht |
 | **M1b – Vorschau & Export** ✅ | GL-Vorschau oben im Editor (Play/Pause/Spulen, Clip antippen = springen), Export 1080p30 nach Filme/Synvyropic, Ken Burns, Musik-Fades, **alle 28 Übergänge als erster Wurf**, Beat-Effekte (Puls, RGB-Puls, VHS) | **Erstes echtes beat-synchrones Video** |
 | **M1c – Gesichter & Videos** ✅ | Gesichtserkennung mit Füllen/Blur/Schwenk pro Bild, Videoliste | Niemand wird abgeschnitten |
-| **M2 – Effekt-Engine** | Live-Auto-Schnitt bei jeder Änderung, Vorschau spielt geänderte Stelle in Schleife, Clip-Fenster (Übergang nach Familie, Dauer in Beats, Intensität, Beat-Kopplung, Farbe, Richtung, Bildmodus), Handauswahl übersteht Neuberechnung, Easing für fortschreitende Übergänge, Versionsanzeige | Profi-Übergänge |
-| **M3 – Licht & Farbe** | Licht/Flash, Formen/Wipes, Farb-Presets, LUT-Import | Komplette Effektpalette |
+| **M2 – Effekt-Engine** ✅ | Live-Auto-Schnitt bei jeder Änderung, Vorschau spielt geänderte Stelle in Schleife, Clip-Fenster (Übergang nach Familie, Dauer in Beats, Intensität, Beat-Kopplung, Farbe, Richtung, Bildmodus), Handauswahl übersteht Neuberechnung, Easing für fortschreitende Übergänge, Versionsanzeige | Profi-Übergänge |
+| **M3 – Farbe** | Looks, Projekt-Regler, LUT-Import, Korrektur pro Bild, sofortige Vorschau | Color Grading wie in Profi-Apps |
 | **M4 – Editor & Text** | Feinschliff-Editor pro Clip, Text-Overlays, Wasserzeichen, Intro/Outro, Projektverwaltung, Stil-Presets | Vollständiger MVP |
 | **M5 – Feinschliff** | 4K, HEVC, 60 fps, Performance, Musik-Wellenform-Editor | Version 1.0 |
 

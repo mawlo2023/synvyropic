@@ -26,6 +26,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import de.synvyropic.model.Transition
+import de.synvyropic.model.ColorGrade
+import de.synvyropic.model.CubeLut
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -232,7 +236,53 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
 
     fun setName(name: String) = change(recut = false) { it.copy(name = name) }
     fun setFormat(f: AspectFormat) = change { it.copy(format = f) }
-    fun setStyle(id: String) = change { it.copy(styleId = id, beatsPerCut = null) }
+    /** Stil wählen; der zum Stil passende Look wird mit übernommen (danach frei änderbar). */
+    fun setStyle(id: String) = change {
+        it.copy(styleId = id, beatsPerCut = null, color = it.color.copy(presetId = Styles.byId(id).colorPresetId))
+    }
+
+    // ------------------------------------------------------------ Farbe
+
+    fun updateColor(f: (ColorGrade) -> ColorGrade) = change(recut = false) { it.copy(color = f(it.color)) }
+
+    fun resetColor() = updateColor { ColorGrade(lutPath = it.lutPath, lutName = it.lutName, lutIntensity = it.lutIntensity) }
+
+    /** .cube-Datei ins Projekt kopieren und prüfen. */
+    fun importLut(uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val name = importer.displayName(uri) ?: "LUT"
+                val file = withContext(Dispatchers.IO) {
+                    val target = File(repo.mediaDir(projectId), "lut_" + System.currentTimeMillis() + ".cube")
+                    getApplication<Application>().contentResolver.openInputStream(uri).use { input ->
+                        requireNotNull(input) { "Datei kann nicht geöffnet werden" }
+                        target.outputStream().use { input.copyTo(it) }
+                    }
+                    target
+                }
+                val lut = withContext(Dispatchers.Default) { CubeLut.parse(file.readText()) }
+                val old = project?.color?.lutPath
+                updateColor { it.copy(lutPath = file.absolutePath, lutName = lut.title?.takeIf { t -> t.isNotBlank() } ?: name.removeSuffix(".cube"), lutIntensity = 1f) }
+                old?.let { File(it).delete() }
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "LUT ungültig: ${e.message}") }
+            }
+        }
+    }
+
+    fun removeLut() {
+        val old = project?.color?.lutPath
+        updateColor { it.copy(lutPath = null, lutName = null) }
+        old?.let { File(it).delete() }
+    }
+
+    /** Farbkorrektur nur für ein Bild (null = keine). */
+    fun setImageColor(path: String, color: ColorGrade?) {
+        change { p ->
+            val info = p.imageInfo[path] ?: return@change p
+            p.copy(imageInfo = p.imageInfo + (path to info.copy(color = color?.takeUnless { it.isNeutral })))
+        }
+    }
     fun setBeatsPerCut(n: Int) = change { it.copy(beatsPerCut = n) }
     fun setLengthMode(m: LengthMode) = change { it.copy(lengthMode = m) }
 

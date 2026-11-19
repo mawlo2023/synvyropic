@@ -107,7 +107,7 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
     val previewError by preview.error.collectAsState()
     LaunchedEffect(previewError) { previewError?.let { snackbar.showSnackbar(it) } }
     // Vorschau bekommt jede neue Timeline
-    LaunchedEffect(state.project?.clips, state.project?.music, state.project?.format) {
+    LaunchedEffect(state.project?.clips, state.project?.music, state.project?.format, state.project?.color) {
         state.project?.takeIf { it.clips.isNotEmpty() }?.let(preview::setProject)
     }
     // Änderungen sofort in der Vorschau zeigen: betroffenen Bereich in Schleife abspielen
@@ -127,6 +127,9 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
     val pickFromApp = rememberLauncherForActivityResult(PickImagesFromApp()) { vm.addImages(it) }
     val pickMusic = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let(vm::setMusic)
+    }
+    val pickLut = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        uri?.let(vm::importLut)
     }
 
     Scaffold(
@@ -157,6 +160,8 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
             pickGallery = { pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
             pickGooglePhotos = { pickFromApp.launch(Unit) },
             pickMusic = { pickMusic.launch(arrayOf("audio/*")) },
+            // .cube hat keinen festen MIME-Typ → alle Dateien zulassen, Prüfung beim Import
+            pickLut = { pickLut.launch(arrayOf("*/*")) },
         )
         ExportDialog(project.id)
         val hasPreview = project.clips.isNotEmpty()
@@ -193,18 +198,24 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
     }
 }
 
-private class EditorActions(val pickGallery: () -> Unit, val pickGooglePhotos: () -> Unit, val pickMusic: () -> Unit)
+private class EditorActions(
+    val pickGallery: () -> Unit,
+    val pickGooglePhotos: () -> Unit,
+    val pickMusic: () -> Unit,
+    val pickLut: () -> Unit,
+)
 
 private fun LazyListScope.settingsSections(project: Project, state: EditorState, vm: EditorViewModel, a: EditorActions) {
     item { NameSection(project, vm) }
     item { ImagesSection(project, state, vm, a) }
     item { MusicSection(project, state, vm, a) }
     item { FormatStyleSection(project, vm) }
+    item { ColorSection(project, vm, a.pickLut) }
     item { CutButton(project, state, vm) }
 }
 
 @Composable
-private fun Section(title: String, number: Int, color: Color, content: @Composable () -> Unit) {
+internal fun Section(title: String, number: Int, color: Color, content: @Composable () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -386,7 +397,7 @@ private fun MusicSection(project: Project, state: EditorState, vm: EditorViewMod
 }
 
 @Composable
-private fun LabeledSlider(
+internal fun LabeledSlider(
     label: String, value: Float, range: ClosedFloatingPointRange<Float>,
     format: (Float) -> String, onDone: (Float) -> Unit,
 ) {

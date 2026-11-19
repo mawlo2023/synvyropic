@@ -39,6 +39,7 @@ class GlProgram(vertex: String, fragment: String, name: String) {
     fun set1f(name: String, v: Float) = GLES30.glUniform1f(loc(name), v)
     fun set2f(name: String, x: Float, y: Float) = GLES30.glUniform2f(loc(name), x, y)
     fun set3f(name: String, x: Float, y: Float, z: Float) = GLES30.glUniform3f(loc(name), x, y, z)
+    fun set4f(name: String, x: Float, y: Float, z: Float, w: Float) = GLES30.glUniform4f(loc(name), x, y, z, w)
 
     fun release() = GLES30.glDeleteProgram(id)
 
