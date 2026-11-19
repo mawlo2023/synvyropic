@@ -20,6 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MovieFilter
+import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,7 +62,7 @@ import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProjectListScreen(onOpen: (String) -> Unit, vm: ProjectListViewModel = viewModel()) {
+fun ProjectListScreen(onOpen: (String) -> Unit, onVideos: () -> Unit, vm: ProjectListViewModel = viewModel()) {
     val projects by vm.projects.collectAsState()
     var toDelete by remember { mutableStateOf<Project?>(null) }
     LaunchedEffect(Unit) { vm.refresh() }
@@ -70,11 +72,19 @@ fun ProjectListScreen(onOpen: (String) -> Unit, vm: ProjectListViewModel = viewM
             TopAppBar(title = { Text(stringResource(R.string.projects_title), fontWeight = FontWeight.Bold) })
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { vm.create(onOpen) },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text(stringResource(R.string.new_project)) },
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                ExtendedFloatingActionButton(
+                    onClick = onVideos,
+                    icon = { Icon(Icons.Filled.VideoLibrary, contentDescription = null) },
+                    text = { Text("Meine Videos") },
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+                ExtendedFloatingActionButton(
+                    onClick = { vm.create(onOpen) },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text(stringResource(R.string.new_project)) },
+                )
+            }
         },
     ) { padding ->
         if (projects.isEmpty()) {

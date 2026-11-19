@@ -28,6 +28,8 @@ object AutoCut {
             beatsPerCut = project.beatsPerCut ?: style.beatsPerCut,
             lengthMode = project.lengthMode,
             seed = project.seed,
+            imageInfo = project.imageInfo,
+            format = project.format,
         )
         return project.copy(
             clips = r.clips,
@@ -46,10 +48,16 @@ object AutoCut {
         lengthMode: LengthMode = LengthMode.FIT_IMAGES,
         seed: Int = 1,
         idPrefix: String = "c",
+        imageInfo: Map<String, ImageInfo> = emptyMap(),
+        format: AspectFormat = AspectFormat.PORTRAIT_9_16,
     ): Result {
         require(beatsPerCut >= 1)
         if (imageUris.isEmpty()) return Result(emptyList(), music?.startMs ?: 0)
         val rnd = Random(seed)
+        val framings = HashMap<Pair<String, Int>, Framing.Result>()
+        fun frame(uri: String, i: Int) = framings.getOrPut(uri to i) {
+            Framing.frame(imageInfo[uri], format, i, style.kenBurnsStrength, rnd)
+        }
         val grid = music?.beats?.takeIf { it.beatsMs.size >= 2 && it.bpm > 0f }
 
         if (grid == null) {
@@ -59,7 +67,8 @@ object AutoCut {
                     imageUri = uri,
                     durationBeats = beatsPerCut,
                     durationMsFallback = 2000,
-                    motion = kenBurns(i, style.kenBurnsStrength, rnd),
+                    motion = frame(uri, i).motion,
+                    fit = frame(uri, i).fit,
                     transitionIn = if (i == 0) Transition(TransitionType.CUT, 0)
                                    else transition(pick(style.transitions, rnd), 500, style, rnd = rnd),
                     effect = style.clipEffect?.let { ClipEffect(it) },
@@ -93,12 +102,15 @@ object AutoCut {
                 beatIdx in downbeats -> transition(pick(style.downbeatTransitions, rnd), (beatMs * style.transitionBeatFraction).roundToLong(), style, rnd = rnd)
                 else -> transition(pick(style.transitions, rnd), (beatMs * style.transitionBeatFraction).roundToLong(), style, rnd = rnd)
             }
+            val uri = imageUris[i % imageUris.size]
+            val framed = frame(uri, i)
             Clip(
                 id = "$idPrefix$i",
-                imageUri = imageUris[i % imageUris.size],
+                imageUri = uri,
                 durationBeats = beatsPerCut,
                 durationMsFallback = (beatMs * beatsPerCut).roundToLong(),
-                motion = kenBurns(i, style.kenBurnsStrength, rnd),
+                motion = framed.motion,
+                fit = framed.fit,
                 transitionIn = trans,
                 effect = style.clipEffect?.let { ClipEffect(it) },
             )
@@ -127,21 +139,6 @@ object AutoCut {
         return weighted.last().first
     }
 
-    /** Abwechselnd rein-/rauszoomen mit leichtem, zufälligem Schwenk. */
-    private fun kenBurns(i: Int, strength: Float, rnd: Random): KenBurns {
-        if (strength <= 0f) return KenBurns(enabled = false)
-        val zoomIn = i % 2 == 0
-        val pan = strength * 0.5f
-        val dx = (rnd.nextFloat() * 2 - 1) * pan
-        val dy = (rnd.nextFloat() * 2 - 1) * pan
-        return KenBurns(
-            enabled = true,
-            startScale = if (zoomIn) 1f else 1f + strength,
-            endScale = if (zoomIn) 1f + strength else 1f,
-            startCenterX = 0.5f - dx / 2, startCenterY = 0.5f - dy / 2,
-            endCenterX = 0.5f + dx / 2, endCenterY = 0.5f + dy / 2,
-        )
-    }
 }
 
 /** Ein Clip mit aufgelösten Zeiten (relativ zum Videostart). */

@@ -25,9 +25,23 @@ out vec4 fragColor;
 uniform sampler2D uTex;
 uniform vec2 uCenter;
 uniform vec2 uSpan;
+uniform int uMode;       // 0 = füllend, 1 = ganzes Bild mit Blur-Rand
+uniform vec2 uBgSpan;    // Ausschnitt des Hintergrunds (füllend, zentriert)
 void main() {
     vec2 st = vec2(vUv.x, 1.0 - vUv.y);
     vec2 uv = uCenter + (st - 0.5) * uSpan;
+    if (uMode == 1 && (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)) {
+        // Unschärfe über hohe Mipmap-Stufen + leichtes Jittern, abgedunkelt
+        vec2 bg = 0.5 + (st - 0.5) * uBgSpan;
+        vec2 d = uBgSpan * 0.02;
+        vec3 c = textureLod(uTex, bg, 5.5).rgb * 0.4
+               + textureLod(uTex, bg + vec2(d.x, d.y), 5.5).rgb * 0.15
+               + textureLod(uTex, bg + vec2(-d.x, d.y), 5.5).rgb * 0.15
+               + textureLod(uTex, bg + vec2(d.x, -d.y), 5.5).rgb * 0.15
+               + textureLod(uTex, bg + vec2(-d.x, -d.y), 5.5).rgb * 0.15;
+        fragColor = vec4(c * 0.6, 1.0);
+        return;
+    }
     fragColor = vec4(texture(uTex, uv).rgb, 1.0);
 }
 """

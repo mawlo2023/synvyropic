@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Keine Medien-Berechtigungen nötig: Fotoauswahl und Dateiauswahl gewähren Zugriff pro Datei. -->
+    <!-- Bilder/Musik: Fotoauswahl und Dateiauswahl gewähren Zugriff pro Datei.
+         Videos lesen: nur für „Meine Videos“, um Exporte früherer Installationen anzuzeigen. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
 
     <!-- Prüfen, ob Google Fotos installiert ist (Paket-Sichtbarkeit ab Android 11). -->
     <queries>

@@ -86,6 +86,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import de.synvyropic.app.ui.theme.Rgb
 import de.synvyropic.model.AspectFormat
+import de.synvyropic.model.FitMode
+import androidx.compose.material.icons.filled.Face
 import de.synvyropic.model.LengthMode
 import de.synvyropic.model.Project
 import de.synvyropic.model.Styles
@@ -231,6 +233,9 @@ private fun ImagesSection(project: Project, state: EditorState, vm: EditorViewMo
                 }
             }
         }
+        if (state.analyzingFaces > 0) {
+            Text("Erkenne Gesichter … (${state.analyzingFaces})", style = MaterialTheme.typography.bodySmall, color = Rgb.Green)
+        }
         if (state.importingImages > 0) {
             Text("Importiere ${state.importingImages} Bild(er) …", style = MaterialTheme.typography.bodySmall)
             LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -245,9 +250,13 @@ private fun ImagesSection(project: Project, state: EditorState, vm: EditorViewMo
             Text("${project.images.size} Bilder", style = MaterialTheme.typography.labelLarge)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 itemsIndexed(project.images, key = { _, p -> p }) { i, path ->
+                    val info = project.imageInfo[path]
                     ImageThumb(
                         path = path,
                         index = i,
+                        faces = info?.faces?.size,
+                        fitLabel = fitLabel(info?.fit, vm.resolvedFit(path)),
+                        onFit = { vm.cycleFit(path) },
                         isFirst = i == 0,
                         isLast = i == project.images.lastIndex,
                         onLeft = { vm.moveImage(i, i - 1) },
@@ -262,7 +271,8 @@ private fun ImagesSection(project: Project, state: EditorState, vm: EditorViewMo
 
 @Composable
 private fun ImageThumb(
-    path: String, index: Int, isFirst: Boolean, isLast: Boolean,
+    path: String, index: Int, faces: Int?, fitLabel: String, onFit: () -> Unit,
+    isFirst: Boolean, isLast: Boolean,
     onLeft: () -> Unit, onRight: () -> Unit, onRemove: () -> Unit,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -282,7 +292,25 @@ private fun ImageThumb(
             IconButton(onClick = onRemove, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) {
                 Icon(Icons.Filled.Close, "Entfernen", modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(50)))
             }
+            if (faces != null && faces > 0) {
+                Row(
+                    Modifier.align(Alignment.BottomStart).padding(4.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Face, "Gesichter", Modifier.size(12.dp), tint = Rgb.Green)
+                    Text(" $faces", style = MaterialTheme.typography.labelSmall)
+                }
+            }
         }
+        Text(
+            fitLabel,
+            style = MaterialTheme.typography.labelSmall,
+            color = Rgb.Blue,
+            modifier = Modifier.padding(top = 4.dp).clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant).clickable(onClick = onFit)
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        )
         Row {
             IconButton(onClick = onLeft, enabled = !isFirst, modifier = Modifier.size(36.dp)) {
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Nach links")
@@ -415,7 +443,7 @@ private fun CutButton(project: Project, state: EditorState, vm: EditorViewModel)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
             onClick = { vm.createCut() },
-            enabled = project.images.isNotEmpty() && state.analysisProgress == null && state.importingImages == 0,
+            enabled = project.images.isNotEmpty() && state.analysisProgress == null && state.importingImages == 0 && state.analyzingFaces == 0,
             modifier = Modifier.fillMaxWidth().height(52.dp),
         ) {
             Icon(Icons.Filled.AutoAwesome, null); Spacer(Modifier.width(8.dp))
@@ -484,6 +512,21 @@ private fun LazyListScope.timelineSection(state: EditorState, onClipClick: (Long
                 )
             }
         }
+    }
+}
+
+/** Beschriftung des Modus-Umschalters; bei Auto steht der aufgelöste Modus dahinter. */
+private fun fitLabel(fit: FitMode?, resolved: FitMode?): String {
+    fun name(f: FitMode?) = when (f) {
+        FitMode.FILL -> "Füllen"
+        FitMode.BLUR -> "Blur"
+        FitMode.PAN -> "Schwenk"
+        else -> "…"
+    }
+    return when (fit) {
+        null -> "Analyse …"
+        FitMode.AUTO -> "Auto: ${name(resolved)}"
+        else -> name(fit)
     }
 }
 

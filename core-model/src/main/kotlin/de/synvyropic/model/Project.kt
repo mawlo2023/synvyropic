@@ -14,6 +14,8 @@ data class Project(
     val styleId: String = "glitch_energy",
     /** Ausgewählte Quellbilder (Reihenfolge = Wunschreihenfolge). */
     val images: List<String> = emptyList(),
+    /** Analyse-Ergebnisse (Größe, Gesichter, Darstellungsmodus) je Bildpfad. */
+    val imageInfo: Map<String, ImageInfo> = emptyMap(),
     /** null = Raster des Stils verwenden. */
     val beatsPerCut: Int? = null,
     val lengthMode: LengthMode = LengthMode.FIT_IMAGES,
@@ -92,9 +94,42 @@ data class Clip(
     val durationBeats: Int = 2,
     val durationMsFallback: Long = 2000,
     val motion: KenBurns = KenBurns(),
+    /** Aufgelöster Modus (nie AUTO): FILL/PAN = füllend, BLUR = ganz mit Blur-Rand. */
+    val fit: FitMode = FitMode.FILL,
     val transitionIn: Transition = Transition(),
     val effect: ClipEffect? = null,
     val color: ColorGrade? = null,
+)
+
+/** Gesichtsrechteck in normierten Bildkoordinaten (0..1, y nach unten). */
+@Serializable
+data class FaceBox(val left: Float, val top: Float, val right: Float, val bottom: Float) {
+    val width get() = right - left
+    val height get() = bottom - top
+    val centerX get() = (left + right) / 2
+    val centerY get() = (top + bottom) / 2
+}
+
+/** Wie ein Bild ins Videoformat eingepasst wird. */
+@Serializable
+enum class FitMode {
+    /** Automatisch anhand der Gesichter wählen. */
+    AUTO,
+    /** Bildschirmfüllend, Ausschnitt auf die Gesichter ausgerichtet. */
+    FILL,
+    /** Ganzes Bild, Ränder mit unscharfer Kopie gefüllt. */
+    BLUR,
+    /** Bildschirmfüllend, Kamerafahrt von Gesicht zu Gesicht. */
+    PAN,
+}
+
+@Serializable
+data class ImageInfo(
+    val width: Int,
+    val height: Int,
+    val faces: List<FaceBox> = emptyList(),
+    /** Vom Nutzer gewählter Modus; AUTO = App entscheidet. */
+    val fit: FitMode = FitMode.AUTO,
 )
 
 @Serializable

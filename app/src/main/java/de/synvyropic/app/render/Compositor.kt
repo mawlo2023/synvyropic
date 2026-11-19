@@ -3,6 +3,7 @@ package de.synvyropic.app.render
 import android.opengl.GLES30
 import de.synvyropic.model.ClipEffectType
 import de.synvyropic.model.ClipState
+import de.synvyropic.model.FitMode
 import de.synvyropic.model.FrameResolver
 import de.synvyropic.model.Project
 import kotlin.math.min
@@ -142,16 +143,28 @@ class Compositor(val width: Int, val height: Int) {
         clipProgram.set1i("uTex", 0)
         val imageAspect = tex.width.toFloat() / tex.height
         val outAspect = width.toFloat() / height
-        var spanX: Float
-        var spanY: Float
-        if (imageAspect > outAspect) { spanX = outAspect / imageAspect; spanY = 1f } else { spanX = 1f; spanY = imageAspect / outAspect }
+        // „Cover“: Bild füllt das Format (Span ≤ 1 je Achse)
+        val coverX: Float
+        val coverY: Float
+        if (imageAspect > outAspect) { coverX = outAspect / imageAspect; coverY = 1f } else { coverX = 1f; coverY = imageAspect / outAspect }
         val zoom = (state.scale * extraZoom).coerceAtLeast(1f)
-        spanX /= zoom
-        spanY /= zoom
-        val cx = if (spanX >= 1f) 0.5f else state.centerX.coerceIn(spanX / 2, 1f - spanX / 2)
-        val cy = if (spanY >= 1f) 0.5f else state.centerY.coerceIn(spanY / 2, 1f - spanY / 2)
-        clipProgram.set2f("uCenter", cx, cy)
-        clipProgram.set2f("uSpan", spanX, spanY)
+        if (state.fit == FitMode.BLUR) {
+            // „Contain“: ganzes Bild sichtbar (Span ≥ 1), Rand = unscharfer Hintergrund
+            val containX = coverX / minOf(coverX, coverY)
+            val containY = coverY / minOf(coverX, coverY)
+            clipProgram.set1i("uMode", 1)
+            clipProgram.set2f("uCenter", 0.5f, 0.5f)
+            clipProgram.set2f("uSpan", containX / zoom, containY / zoom)
+            clipProgram.set2f("uBgSpan", coverX * 0.9f, coverY * 0.9f)
+        } else {
+            val spanX = coverX / zoom
+            val spanY = coverY / zoom
+            val cx = if (spanX >= 1f) 0.5f else state.centerX.coerceIn(spanX / 2, 1f - spanX / 2)
+            val cy = if (spanY >= 1f) 0.5f else state.centerY.coerceIn(spanY / 2, 1f - spanY / 2)
+            clipProgram.set1i("uMode", 0)
+            clipProgram.set2f("uCenter", cx, cy)
+            clipProgram.set2f("uSpan", spanX, spanY)
+        }
         quad.draw()
     }
 

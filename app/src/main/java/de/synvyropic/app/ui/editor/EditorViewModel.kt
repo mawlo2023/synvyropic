@@ -7,6 +7,9 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import de.synvyropic.app.data.ProjectRepository
 import de.synvyropic.app.media.AudioDecoder
+import de.synvyropic.app.media.FaceAnalyzer
+import de.synvyropic.model.FitMode
+import de.synvyropic.model.Framing
 import de.synvyropic.app.media.MediaImporter
 import de.synvyropic.audio.BeatDetector
 import de.synvyropic.model.AspectFormat
@@ -28,6 +31,8 @@ import java.io.File
 data class EditorState(
     val project: Project? = null,
     val importingImages: Int = 0,
+    /** Anzahl Bilder, deren Gesichtserkennung noch läuft. */
+    val analyzingFaces: Int = 0,
     val musicTitle: String? = null,
     val musicDurationMs: Long = 0,
     /** null = keine Analyse aktiv, sonst Fortschritt 0..1 */
@@ -60,7 +65,39 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
                     musicDurationMs = p.music?.let { m -> importer.audioDurationMs(File(m.uri)) } ?: 0,
                 )
             }
+            // Bilder aus älteren Versionen ohne Gesichtsanalyse nachträglich analysieren
+            analyzeMissing()
         }
+    }
+
+    private suspend fun analyzeMissing() {
+        val missing = project?.let { p -> p.images.filter { it !in p.imageInfo } }.orEmpty()
+        if (missing.isEmpty()) return
+        _state.update { it.copy(analyzingFaces = it.analyzingFaces + missing.size) }
+        for (path in missing) {
+            val info = runCatching { FaceAnalyzer.analyze(File(path)) }.getOrNull()
+            if (info != null) change { it.copy(imageInfo = it.imageInfo + (path to info)) }
+            _state.update { it.copy(analyzingFaces = it.analyzingFaces - 1) }
+        }
+    }
+
+    /** Darstellungsmodus eines Bildes durchschalten: Auto → Füllen → Blur → Schwenk → Auto. */
+    fun cycleFit(path: String) = change { p ->
+        val info = p.imageInfo[path] ?: return@change p
+        val next = when (info.fit) {
+            FitMode.AUTO -> FitMode.FILL
+            FitMode.FILL -> FitMode.BLUR
+            FitMode.BLUR -> FitMode.PAN
+            FitMode.PAN -> FitMode.AUTO
+        }
+        p.copy(imageInfo = p.imageInfo + (path to info.copy(fit = next)))
+    }
+
+    /** Tatsächlich verwendeter Modus (AUTO aufgelöst) für die Anzeige. */
+    fun resolvedFit(path: String): FitMode? {
+        val p = project ?: return null
+        val info = p.imageInfo[path] ?: return null
+        return Framing.frame(info, p.format, 0, 0.1f, kotlin.random.Random(0)).fit
     }
 
     private val project get() = _state.value.project
@@ -89,6 +126,7 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
             }
             change { it.copy(images = it.images + files) }
             if (failed > 0) _state.update { it.copy(error = "$failed Bild(er) konnten nicht geladen werden") }
+            analyzeMissing()
         }
     }
 
@@ -98,8 +136,9 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
     }
 
     fun removeImage(index: Int) = change { p ->
-        File(p.images[index]).delete()
-        p.copy(images = p.images.toMutableList().apply { removeAt(index) })
+        val path = p.images[index]
+        File(path).delete()
+        p.copy(images = p.images.toMutableList().apply { removeAt(index) }, imageInfo = p.imageInfo - path)
     }
 
     fun shuffleImages() = change { it.copy(images = it.images.shuffled()) }
@@ -144,7 +183,7 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
     // ------------------------------------------------------------ Format & Stil
 
     fun setName(name: String) = change(dirty = false) { it.copy(name = name) }
-    fun setFormat(f: AspectFormat) = change(dirty = false) { it.copy(format = f) }
+    fun setFormat(f: AspectFormat) = change { it.copy(format = f) }
     fun setStyle(id: String) = change { it.copy(styleId = id, beatsPerCut = null) }
     fun setBeatsPerCut(n: Int) = change { it.copy(beatsPerCut = n) }
     fun setLengthMode(m: LengthMode) = change { it.copy(lengthMode = m) }

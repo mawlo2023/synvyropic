@@ -3,7 +3,7 @@
 > Android-App, die aus Einzelbildern und Musik automatisch beat-synchrone Reels und Slideshows
 > mit professionellen GPU-Übergängen erzeugt.
 >
-> Status: **v0.4 – M0 + M1a fertig, M1b in Arbeit** – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
+> Status: **v0.5 – M1 fertig, Gesichtserkennung + Videoliste ergänzt** – wird im Frage-Antwort-Verfahren gemeinsam gepflegt.
 
 ---
 
@@ -52,6 +52,11 @@ Jeder Übergang hat: Dauer (in Beats oder ms), Intensität, Easing-Kurve; Glitch
 - **Beat-Pulse** – leichter Zoom/Helligkeitspuls auf jedem Beat.
 - Unschärfe-Hintergrund, wenn das Bildformat nicht zum Videoformat passt (statt schwarzer Balken).
 
+### 3.3a Gesichtserkennung & Bildaufteilung
+- Beim Import erkennt ML Kit (offline, im APK) alle Gesichter; Ergebnis wird je Bild im Projekt gespeichert.
+- Modus pro Bild (Umschalter unter dem Vorschaubild): **Auto** · **Füllen** (Ausschnitt + Ken Burns um die Gesichter, Zoom nur so weit, dass alle sichtbar bleiben) · **Blur** (ganzes Bild, Rand = unscharfe Kopie) · **Schwenk** (Kamerafahrt von Gesicht zu Gesicht).
+- Auto: passen alle Gesichter in den Ausschnitt → Füllen; knapp zu breit (≤ 1,8×) → Schwenk; weit verteilte Gruppe → Blur.
+
 ### 3.4 Farbe
 - Presets: Cinematic, Teal & Orange, Vintage, S/W, Warm, Cool, High Contrast, Faded.
 - **LUT-Import**: `.cube`-Dateien (3D-LUT bis 64³) → 3D-Textur; Intensitätsregler.
@@ -64,6 +69,10 @@ Jeder Übergang hat: Dauer (in Beats oder ms), Intensität, Easing-Kurve; Glitch
 ### 3.6 Musik
 - Ausschnitt wählen, Lautstärke, Fade-In/Fade-Out.
 - Videolänge = Musikausschnitt **oder** automatisch passend zur Bildanzahl.
+
+### 3.6a Meine Videos
+- Button „Meine Videos“ links neben „Neues Projekt“: alle Exporte aus Filme/Synvyropic mit Vorschaubild, Dauer, Datum, Größe; Abspielen, Teilen, Löschen (System-Bestätigung).
+- Berechtigung „Videos lesen“ wird einmal erfragt, damit auch Exporte früherer Installationen erscheinen.
 
 ### 3.7 Projekte
 - Speicherung als JSON (kotlinx.serialization) im App-Speicher; Bilder/Audio werden per URI referenziert, bei Bedarf in den App-Speicher kopiert, damit Projekte nicht „brechen“.
@@ -137,7 +146,8 @@ Ein Stil ist eine Regelmenge: Schnittraster, Übergangspool (gewichtet), Effekt 
 |---|---|---|
 | **M0 – Fundament** | Gradle-Projekt, Module, Compose-Gerüst, GitHub-Actions-Build | Installierbare APK mit leerer Oberfläche |
 | **M1a – Medien & Beats** ✅ | Bild-/Musikauswahl (inkl. Google Fotos), Beat-Analyse mit Visualisierung, Auto-Schnitt mit 4 Stilen, Projekte speichern | Timeline steht |
-| **M1b – Vorschau & Export** | GL-Vorschau oben im Editor (Play/Pause/Spulen, Clip antippen = springen), Export 1080p30 nach Filme/Synvyropic, Ken Burns, Musik-Fades, **alle 28 Übergänge als erster Wurf**, Beat-Effekte (Puls, RGB-Puls, VHS) | **Erstes echtes beat-synchrones Video** |
+| **M1b – Vorschau & Export** ✅ | GL-Vorschau oben im Editor (Play/Pause/Spulen, Clip antippen = springen), Export 1080p30 nach Filme/Synvyropic, Ken Burns, Musik-Fades, **alle 28 Übergänge als erster Wurf**, Beat-Effekte (Puls, RGB-Puls, VHS) | **Erstes echtes beat-synchrones Video** |
+| **M1c – Gesichter & Videos** ✅ | Gesichtserkennung mit Füllen/Blur/Schwenk pro Bild, Videoliste | Niemand wird abgeschnitten |
 | **M2 – Effekt-Engine** | Feinschliff der Übergänge (Qualität, Easing, Parameter je Übergang), Übergangs-Auswahl im Editor | Profi-Übergänge |
 | **M3 – Licht & Farbe** | Licht/Flash, Formen/Wipes, Farb-Presets, LUT-Import | Komplette Effektpalette |
 | **M4 – Editor & Text** | Feinschliff-Editor pro Clip, Text-Overlays, Wasserzeichen, Intro/Outro, Projektverwaltung, Stil-Presets | Vollständiger MVP |
