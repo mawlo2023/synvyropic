@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -73,6 +74,7 @@ fun PreviewPane(controller: PreviewController, project: Project, modifier: Modif
     val playing by controller.playing.collectAsState()
     val position by controller.position.collectAsState()
     val duration by controller.duration.collectAsState()
+    val beat by controller.beat.collectAsState()
     var scrubbing by remember { mutableStateOf<Float?>(null) }
     val ratio = project.format.width.toFloat() / project.format.height
 
@@ -98,6 +100,16 @@ fun PreviewPane(controller: PreviewController, project: Project, modifier: Modif
                 onValueChangeFinished = { scrubbing = null },
                 valueRange = 0f..duration.coerceAtLeast(1).toFloat(),
                 modifier = Modifier.weight(1f),
+            )
+            // Beat-Anzeige: leuchtet auf jedem erkannten Beat (Takt-Eins in Magenta)
+            Box(
+                Modifier.size(14.dp).clip(androidx.compose.foundation.shape.CircleShape).background(
+                    when (beat) {
+                        2 -> de.synvyropic.app.ui.theme.Rgb.Magenta
+                        1 -> de.synvyropic.app.ui.theme.Rgb.Cyan
+                        else -> Color.White.copy(alpha = 0.15f)
+                    },
+                ),
             )
             Text(
                 "${formatMs(position)} / ${formatMs(duration)}",

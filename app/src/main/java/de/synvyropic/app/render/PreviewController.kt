@@ -52,8 +52,51 @@ class PreviewController(context: Context) {
         preserveEGLContextOnPause = true
     }
 
-    fun currentTime(): Long =
-        if (isPlaying) basePos + (SystemClock.elapsedRealtime() - baseTime) else basePos
+    // Audio als Uhr: Zeitstempel des Musik-Players (was gerade aus dem Lautsprecher kommt)
+    @Volatile private var clockMusicStart = -1L   // -1 = keine Musik-Uhr
+    @Volatile private var anchorMediaUs = 0L
+    @Volatile private var anchorNanos = 0L       // 0 = noch kein gültiger Zeitstempel
+    @Volatile private var clockRate = 1f
+
+    private val _beat = MutableStateFlow(0)
+    /** 0 = kein Beat, 1 = Beat, 2 = Takt-Eins (leuchtet ~120 ms). */
+    val beat: StateFlow<Int> = _beat.asStateFlow()
+
+    fun currentTime(): Long {
+        if (!isPlaying) return basePos
+        val ms = clockMusicStart
+        if (ms >= 0) {
+            val ns = anchorNanos
+            // Musik läuft noch nicht hörbar → Bild wartet, statt vorzulaufen
+            if (ns == 0L) return basePos
+            val media = anchorMediaUs + ((System.nanoTime() - ns) / 1000 * clockRate).toLong()
+            return (media / 1000 - ms).coerceIn(0, _duration.value)
+        }
+        return basePos + (SystemClock.elapsedRealtime() - baseTime)
+    }
+
+    /** Zeitstempel des Players übernehmen (nur plausible, frische Werte). */
+    private fun syncAudioClock() {
+        val mp = player ?: return
+        if (clockMusicStart < 0) return
+        val ts = runCatching { mp.timestamp }.getOrNull() ?: return
+        if (ts.mediaClockRate <= 0f) return
+        val expected = (clockMusicStart + basePos) * 1000
+        // Nach Start/Spulen erst einen Zeitstempel nahe der Zielposition akzeptieren
+        if (anchorNanos == 0L && kotlin.math.abs(ts.anchorMediaTimeUs - expected) > 600_000) return
+        anchorMediaUs = ts.anchorMediaTimeUs
+        anchorNanos = ts.anchorSystemNanoTime
+        clockRate = ts.mediaClockRate
+    }
+
+    /** Zur Systemuhr wechseln (keine Musik oder Musik zu Ende). */
+    private fun useSystemClock() {
+        val t = currentTime()
+        clockMusicStart = -1
+        anchorNanos = 0
+        basePos = t
+        baseTime = SystemClock.elapsedRealtime()
+    }
 
     fun setProject(p: Project) {
         val old = project
@@ -108,10 +151,14 @@ class PreviewController(context: Context) {
         isPlaying = true
         _playing.value = true
         val music = p.music
+        anchorNanos = 0
+        clockMusicStart = -1
         if (music != null) player?.let { mp ->
-            mp.seekTo((music.startMs + basePos).toInt())
+            mp.seekTo((music.startMs + basePos).toLong(), MediaPlayer.SEEK_CLOSEST)
             applyVolume(basePos)
             mp.start()
+            // Ab jetzt gibt die Musik den Takt vor
+            clockMusicStart = music.startMs
         }
         view.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
         main.post(ticker)
@@ -122,6 +169,9 @@ class PreviewController(context: Context) {
         if (!isPlaying) return
         basePos = currentTime().coerceAtMost(_duration.value)
         isPlaying = false
+        clockMusicStart = -1
+        anchorNanos = 0
+        _beat.value = 0
         _playing.value = false
         player?.takeIf { it.isPlaying }?.pause()
         stopClipAudio()
@@ -141,7 +191,10 @@ class PreviewController(context: Context) {
         basePos = t
         baseTime = SystemClock.elapsedRealtime()
         _position.value = t
-        if (isPlaying) project?.music?.let { player?.seekTo((it.startMs + t).toInt()) }
+        if (isPlaying) project?.music?.let { m ->
+            player?.seekTo((m.startMs + t), MediaPlayer.SEEK_CLOSEST)
+            anchorNanos = 0 // neuen Zeitstempel abwarten
+        }
         stopClipAudio() // wird im nächsten Takt passend neu gestartet
         view.requestRender()
     }
@@ -169,6 +222,9 @@ class PreviewController(context: Context) {
     private val ticker = object : Runnable {
         override fun run() {
             if (!isPlaying) return
+            syncAudioClock()
+            // Musik zu Ende, Video läuft weiter → Systemuhr
+            if (clockMusicStart >= 0 && anchorNanos != 0L && player?.isPlaying == false) useSystemClock()
             val t = currentTime()
             if (loopEnd > 0 && t >= loopEnd) {
                 // Bereich fertig: am Ende stehen bleiben
@@ -184,9 +240,10 @@ class PreviewController(context: Context) {
                 return
             }
             _position.value = t
+            _beat.value = resolver?.sinceBeat(t)?.let { (since, down) -> if (since < 120) (if (down) 2 else 1) else 0 } ?: 0
             updateClipAudio(t)
             applyVolume(t)
-            main.postDelayed(this, 40)
+            main.postDelayed(this, 20)
         }
     }
 

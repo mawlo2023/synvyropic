@@ -38,6 +38,7 @@ object AutoCut {
             seed = project.seed,
             imageInfo = project.imageInfo,
             format = project.format,
+            dynamic = project.dynamicCut,
         )
         // Von Hand gewählte Übergänge übernehmen (nicht für Clip 0 – der hat keinen Übergang)
         val clips = r.clips.mapIndexed { i, c ->
@@ -63,6 +64,7 @@ object AutoCut {
         idPrefix: String = "c",
         imageInfo: Map<String, ImageInfo> = emptyMap(),
         format: AspectFormat = AspectFormat.PORTRAIT_9_16,
+        dynamic: Boolean = false,
     ): Result {
         require(beatsPerCut >= 1)
         if (imageUris.isEmpty()) return Result(emptyList(), music?.startMs ?: 0)
@@ -116,14 +118,31 @@ object AutoCut {
         val beatMs = 60000f / grid.bpm
         val availableBeats = grid.beatsMs.count { it in startMs until endMs }
 
-        // Plätze bestimmen: Videos belegen ggf. mehrere Raster
+        // Dynamischer Schnitt: mittlere Lautheit der kommenden Beats bestimmt die Haltedauer
+        val energies = grid.energies.takeIf { dynamic && it.size == grid.beatsMs.size }
+        fun energyAt(beat: Int, count: Int): Float? = energies?.let { e ->
+            val a = beat.coerceIn(0, e.lastIndex)
+            val b = (beat + count).coerceIn(a + 1, e.size)
+            e.subList(a, b).average().toFloat()
+        }
+        fun holdBeats(beat: Int): Int {
+            val e = energyAt(beat, beatsPerCut * 2) ?: return beatsPerCut
+            val factor = when {
+                e < 0.35f -> 4   // Break / sehr ruhig: lange stehen lassen
+                e < 0.6f -> 2    // ruhiger Teil
+                else -> 1
+            }
+            return (beatsPerCut * factor).coerceAtMost(maxOf(beatsPerCut, 8))
+        }
+        // Plätze bestimmen: Videos belegen ggf. mehrere Raster, ruhige Stellen werden länger gehalten
         val clipBeats = ArrayList<Int>()
         run {
             var used = 0
             var i = 0
             while (true) {
                 if (lengthMode == LengthMode.FIT_IMAGES && i >= imageUris.size) break
-                val b = videoBeats(imageUris[i % imageUris.size], beatMs)
+                val uri = imageUris[i % imageUris.size]
+                val b = if (imageInfo[uri]?.video != null) videoBeats(uri, beatMs) else holdBeats(firstIdx + used)
                 if (lengthMode == LengthMode.FIT_MUSIC && i > 0 && used + b > availableBeats) break
                 clipBeats += b; used += b; i++
                 if (i > 2000) break
@@ -135,8 +154,11 @@ object AutoCut {
 
         val clips = clipBeats.indices.map { i ->
             val beatIdx = firstIdx + startBeat[i]
+            val calm = (energyAt(beatIdx, clipBeats[i]) ?: 1f) < 0.5f
             val trans = when {
                 i == 0 -> Transition(TransitionType.CUT, 0)
+                // ruhige Passage: weiche, längere Blende statt harter Effekte
+                calm && beatIdx !in drops -> transition(pick(CALM_TRANSITIONS, rnd), beatMs.roundToLong(), style, 0.7f, rnd)
                 beatIdx in drops -> transition(style.dropTransition, (beatMs * 1.5f).roundToLong(), style, 1f, rnd)
                 beatIdx in downbeats -> transition(pick(style.downbeatTransitions, rnd), (beatMs * style.transitionBeatFraction).roundToLong(), style, rnd = rnd)
                 else -> transition(pick(style.transitions, rnd), (beatMs * style.transitionBeatFraction).roundToLong(), style, rnd = rnd)
@@ -156,6 +178,8 @@ object AutoCut {
         }
         return Result(clips, startMs)
     }
+
+    private val CALM_TRANSITIONS = listOf(TransitionType.CROSSFADE to 3, TransitionType.DISSOLVE to 2, TransitionType.LIGHT_LEAK to 2, TransitionType.LUMA_MORPH to 1)
 
     /** RGB-Akzentfarben für Farb-Flashes. */
     private val flashColors = longArrayOf(0xFF27D3FF, 0xFF3D7BFF, 0xFF9B4DFF, 0xFFE445E6, 0xFFFF8A3D)

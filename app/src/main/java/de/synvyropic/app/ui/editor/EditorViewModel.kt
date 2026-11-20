@@ -103,14 +103,10 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
                     musicDurationMs = p.music?.let { m -> importer.audioDurationMs(File(m.uri)) } ?: 0,
                 )
             }
-            // Musik aus älteren Versionen: Wellenform nachträglich berechnen
-            p.music?.takeIf { it.waveform.isEmpty() }?.let { m ->
-                launch {
-                    runCatching { AudioDecoder.decodeMono(File(m.uri)) }.getOrNull()?.let { pcm ->
-                        val wave = Waveform.peaks(pcm.samples)
-                        change(recut = false) { it.copy(music = it.music?.copy(waveform = wave)) }
-                    }
-                }
+            // Musik aus älteren Versionen: mit der verbesserten Beat-Erkennung neu analysieren
+            p.music?.let { m ->
+                val outdated = m.beats?.let { it.version < BeatDetector.VERSION && !it.edited } ?: true
+                if (outdated || m.waveform.isEmpty()) reanalyzeMusic(silent = !outdated)
             }
             // Bilder aus älteren Versionen ohne Gesichtsanalyse nachträglich analysieren
             analyzeMissing()
@@ -338,6 +334,54 @@ class EditorViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMo
             }
         }
     }
+
+    /** Beats (und Wellenform) der aktuellen Musik neu bestimmen; Ausschnitt und Fades bleiben. */
+    fun reanalyzeMusic(silent: Boolean = false) {
+        val m = project?.music ?: return
+        analysisJob?.cancel()
+        analysisJob = viewModelScope.launch {
+            if (!silent) _state.update { it.copy(analysisProgress = 0f) }
+            try {
+                val pcm = AudioDecoder.decodeMono(File(m.uri)) { p -> if (!silent) _state.update { it.copy(analysisProgress = p * 0.5f) } }
+                val grid = BeatDetector().analyze(pcm.samples, pcm.sampleRate) { p ->
+                    if (!silent) _state.update { it.copy(analysisProgress = 0.5f + p * 0.5f) }
+                }
+                val wave = Waveform.peaks(pcm.samples)
+                change { it.copy(music = it.music?.copy(beats = grid, waveform = wave)) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "Musik konnte nicht analysiert werden: ${e.message}") }
+            } finally {
+                _state.update { it.copy(analysisProgress = null) }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ Beat-Korrektur
+
+    private fun editBeats(f: (de.synvyropic.model.BeatGrid) -> de.synvyropic.model.BeatGrid?) = change { p ->
+        val m = p.music ?: return@change p
+        val g = m.beats ?: return@change p
+        val ng = f(g) ?: return@change p
+        p.copy(music = m.copy(beats = ng))
+    }
+
+    fun tempoDouble() = editBeats { de.synvyropic.model.BeatEdit.double(it) }
+    fun tempoHalf() = editBeats { de.synvyropic.model.BeatEdit.half(it) }
+    fun shiftBeats(ms: Long) = editBeats { de.synvyropic.model.BeatEdit.shift(it, ms) }
+
+    /** Mitgetippte Zeitpunkte (Videozeit) → Musikzeit → neues Raster. */
+    fun applyTaps(videoTimes: List<Long>): Boolean {
+        val m = project?.music ?: return false
+        val taps = videoTimes.map { it + m.startMs }
+        val dur = _state.value.musicDurationMs.takeIf { it > 0 } ?: (m.beats?.beatsMs?.lastOrNull() ?: 0L)
+        val g = de.synvyropic.model.BeatEdit.fromTaps(m.beats, taps, dur) ?: return false
+        change { it.copy(music = it.music?.copy(beats = g)) }
+        return true
+    }
+
+    fun setDynamicCut(on: Boolean) = change { it.copy(dynamicCut = on) }
 
     fun setMusicRange(startMs: Long, endMs: Long) = change { p ->
         p.copy(music = p.music?.copy(startMs = startMs, endMs = endMs))

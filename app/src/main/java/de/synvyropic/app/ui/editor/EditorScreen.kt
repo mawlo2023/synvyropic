@@ -232,7 +232,8 @@ fun EditorScreen(onBack: () -> Unit, vm: EditorViewModel = viewModel()) {
             // .cube hat keinen festen MIME-Typ → alle Dateien zulassen, Prüfung beim Import
             pickLut = { pickLut.launch(arrayOf("*/*")) },
             pickLogo = { pickLogo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-            currentTime = { preview.position.value },
+            currentTime = { preview.currentTime() },
+            playPreview = { preview.play() },
         )
         ExportDialog(project.id)
         val hasPreview = project.clips.isNotEmpty()
@@ -276,6 +277,7 @@ private class EditorActions(
     val pickLut: () -> Unit,
     val pickLogo: () -> Unit,
     val currentTime: () -> Long,
+    val playPreview: () -> Unit,
 )
 
 private fun LazyListScope.settingsSections(project: Project, state: EditorState, vm: EditorViewModel, a: EditorActions) {
@@ -515,6 +517,7 @@ private fun MusicSection(project: Project, state: EditorState, vm: EditorViewMod
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            BeatTools(project, vm, a)
             LabeledSlider("Lautstärke", music.volume, 0f..1f, { "${(it * 100).toInt()} %" }) { vm.setVolume(it) }
             LabeledSlider("Fade-In", music.fadeInMs / 1000f, 0f..5f, { "%.1f s".format(it) }) {
                 vm.setFades((it * 1000).roundToLong(), music.fadeOutMs)
@@ -523,6 +526,46 @@ private fun MusicSection(project: Project, state: EditorState, vm: EditorViewMod
                 vm.setFades(music.fadeInMs, (it * 1000).roundToLong())
             }
         }
+    }
+}
+
+/** Beat-Kontrolle: dynamischer Schnitt, Tempo ×2/÷2, Verschieben, Tap-Tempo, Neu-Analyse. */
+@Composable
+private fun BeatTools(project: Project, vm: EditorViewModel, a: EditorActions) {
+    var taps by remember { mutableStateOf(listOf<Long>()) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        FilterChip(
+            selected = project.dynamicCut,
+            onClick = { vm.setDynamicCut(!project.dynamicCut) },
+            label = { Text("Dynamischer Schnitt: ruhige Stellen länger halten") },
+        )
+        Text(
+            "Beats prüfen: Vorschau abspielen – der Punkt neben der Zeit leuchtet auf jedem Beat. Passt es nicht, hier korrigieren:",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedButton(onClick = vm::tempoHalf) { Text("Tempo ÷2") }
+            OutlinedButton(onClick = vm::tempoDouble) { Text("Tempo ×2") }
+            OutlinedButton(onClick = { vm.shiftBeats(-20) }) { Text("◀ 20 ms früher") }
+            OutlinedButton(onClick = { vm.shiftBeats(20) }) { Text("20 ms später ▶") }
+        }
+        // Tap-Tempo: während die Vorschau läuft im Takt tippen
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {
+                if (taps.isEmpty()) a.playPreview()
+                taps = taps + a.currentTime()
+            }) { Text(if (taps.isEmpty()) "Tap-Tempo starten" else "Tap (${taps.size})") }
+            if (taps.size >= 4) {
+                TextButton(onClick = { if (vm.applyTaps(taps)) taps = emptyList() }) { Text("Übernehmen") }
+            }
+            if (taps.isNotEmpty()) TextButton(onClick = { taps = emptyList() }) { Text("Verwerfen") }
+        }
+        if (taps.isNotEmpty() && taps.size < 4) {
+            Text("Mindestens 4× im Takt auf jeden Schlag tippen – der erste Tap wird zur Takt-Eins.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        TextButton(onClick = { vm.reanalyzeMusic() }) { Text("Beats neu erkennen") }
     }
 }
 

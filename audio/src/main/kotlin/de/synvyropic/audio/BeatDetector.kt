@@ -53,14 +53,71 @@ class BeatDetector(
         onProgress(0.9f)
 
         val bpm = 60f * frameRate / period
-        // Zeitpunkt = Fenstermitte des Frames.
-        val beatsMs = beatFrames.map { ((it * hopSize + frameSize / 2) * 1000.0 / sampleRate).roundToLong() }
+        // Beats auf den exakten Anschlag einrasten und Ausreißer glätten (Sub-Frame-genau)
+        val refined = refine(beatFrames, env, period)
+        // Zeitpunkt = Fenstermitte + Kalibrierung der Analyse-Verzögerung
+        val beatsMs = refined.map { ((it * hopSize + frameSize / 2) * 1000.0 / sampleRate + LATENCY_MS).roundToLong() }
 
         val strengths = beatStrengths(beatFrames, env, bass)
         val downbeats = findDownbeats(beatFrames, bass)
         val drops = findDrops(beatFrames, onset.energy, downbeats)
+        val energies = beatEnergies(beatFrames, onset.energy)
         onProgress(1f)
-        return BeatGrid(bpm, beatsMs, strengths, downbeats, drops)
+        return BeatGrid(bpm, beatsMs, strengths, downbeats, drops, energies, version = VERSION)
+    }
+
+    /**
+     * 1) Jeder Beat sucht im Umkreis von ±3 Frames das Maximum der Onset-Hüllkurve (parabolisch interpoliert).
+     * 2) Ein gleitendes lineares Raster (Ausgleichsgerade über 9 Beats) glättet Ausreißer;
+     *    weicht ein Anschlag stark ab, gilt das Raster, sonst das Mittel aus beiden.
+     */
+    internal fun refine(beats: List<Int>, env: FloatArray, period: Float): List<Double> {
+        if (beats.isEmpty()) return emptyList()
+        val peaks = DoubleArray(beats.size) { i ->
+            val b = beats[i]
+            var best = b
+            for (k in max(1, b - 3)..min(env.size - 2, b + 3)) if (env[k] > env[best]) best = k
+            if (best in 1 until env.size - 1) {
+                val a = env[best - 1]; val c = env[best]; val d = env[best + 1]
+                val den = a - 2 * c + d
+                best + if (abs(den) > 1e-9f) (0.5 * (a - d) / den).coerceIn(-0.5, 0.5) else 0.0
+            } else best.toDouble()
+        }
+        val half = 4
+        return peaks.indices.map { i ->
+            val lo = max(0, i - half)
+            val hi = min(peaks.size - 1, i + half)
+            val n = hi - lo + 1
+            if (n < 3) return@map peaks[i]
+            // Ausgleichsgerade t = m·i + c über die Nachbarn
+            var sx = 0.0; var sy = 0.0; var sxx = 0.0; var sxy = 0.0
+            for (j in lo..hi) { sx += j; sy += peaks[j]; sxx += j.toDouble() * j; sxy += j * peaks[j] }
+            val m = (n * sxy - sx * sy) / (n * sxx - sx * sx)
+            val c = (sy - m * sx) / n
+            val grid = m * i + c
+            if (abs(peaks[i] - grid) > period * 0.12) grid else 0.5 * (grid + peaks[i])
+        }
+    }
+
+    /** Lautheit je Beat (RMS über das Beat-Intervall), auf das 90. Perzentil normiert. */
+    internal fun beatEnergies(beats: List<Int>, energy: FloatArray): List<Float> {
+        if (beats.isEmpty()) return emptyList()
+        val raw = beats.indices.map { i ->
+            val a = beats[i]
+            val b = if (i + 1 < beats.size) beats[i + 1] else min(energy.size, a + (a - beats[max(0, i - 1)]).coerceAtLeast(1))
+            var s = 0f; var c = 0
+            for (k in a until min(b, energy.size)) { s += energy[k]; c++ }
+            if (c > 0) s / c else 0f
+        }
+        val p90 = raw.sorted()[((raw.size - 1) * 0.9f).toInt()].takeIf { it > 1e-6f } ?: 1f
+        return raw.map { min(1f, it / p90) }
+    }
+
+    companion object {
+        /** Aktuelle Version des Verfahrens (ältere Analysen werden in der App erneuert). */
+        const val VERSION = 2
+        /** Ausgleich der Analyse-Verzögerung (empirisch an Testsignalen kalibriert). */
+        const val LATENCY_MS = 10.0
     }
 
     // ---------------------------------------------------------------- Onsets

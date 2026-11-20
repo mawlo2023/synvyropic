@@ -21,6 +21,8 @@ data class Project(
     val lengthMode: LengthMode = LengthMode.FIT_IMAGES,
     /** Beste Bilder auf Anfang und Drops legen. */
     val bestOnHighlights: Boolean = false,
+    /** Dynamischer Schnitt: in ruhigen Passagen/Breaks Bilder länger halten und weich überblenden. */
+    val dynamicCut: Boolean = true,
     val seed: Int = 1,
     /** Stil aller Bild-Untertitel (Text steht in ImageInfo.caption). */
     val captionStyle: TextStyle = TextStyle.CAPTION,
@@ -95,6 +97,12 @@ data class BeatGrid(
     val strengths: List<Float>,
     val downbeatIndices: List<Int> = emptyList(),
     val dropIndices: List<Int> = emptyList(),
+    /** Lautheit je Beat 0..1 (für dynamischen Schnitt: ruhige Stellen länger halten). */
+    val energies: List<Float> = emptyList(),
+    /** Version des Analyse-Verfahrens (ältere Analysen werden automatisch erneuert). */
+    val version: Int = 1,
+    /** Von Hand korrigiert (Tempo/Verschiebung/Tap) – wird nicht automatisch neu analysiert. */
+    val edited: Boolean = false,
 )
 
 /** Ein Bild auf der Timeline. Dauer wird in Beats angegeben, wenn Musik vorhanden ist. */

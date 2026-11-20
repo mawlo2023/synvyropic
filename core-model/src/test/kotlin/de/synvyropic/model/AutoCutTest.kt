@@ -108,3 +108,36 @@ class OverrideAndEasingTest {
         assertEquals(0.5f, Easing.EASE_IN_OUT.apply(0.5f), 1e-3f) // Mitte bleibt auf dem Beat
     }
 }
+
+class DynamicCutTest {
+    /** 120 BPM; Beats 16–31 sind ein ruhiger Break. */
+    private val grid = BeatGrid(
+        bpm = 120f, beatsMs = (0 until 64).map { it * 500L }, strengths = List(64) { 1f },
+        downbeatIndices = (0 until 64 step 4).toList(),
+        energies = List(64) { if (it in 16..31) 0.2f else 0.95f }, version = 2,
+    )
+    private fun project(dynamic: Boolean) = Project(
+        id = "p", name = "t", createdAt = 0, images = (1..12).map { "i$it" }, styleId = Styles.FLASH_PARTY.id,
+        music = MusicTrack("m", beats = grid), dynamicCut = dynamic,
+    )
+
+    @Test
+    fun breakHoldsImagesLongerWithSoftTransitions() {
+        val p = AutoCut.apply(project(true))
+        val timed = Timeline.resolve(p)
+        val inBreak = timed.filter { it.startMs in 8000 until 16000 }
+        val loud = timed.filter { it.startMs < 8000 }
+        assertTrue("im Break länger halten", inBreak.all { it.clip.durationBeats >= 4 })
+        assertTrue("laut: Stil-Raster (1 Beat)", loud.all { it.clip.durationBeats == 1 })
+        val soft = setOf(TransitionType.CROSSFADE, TransitionType.DISSOLVE, TransitionType.LIGHT_LEAK, TransitionType.LUMA_MORPH)
+        assertTrue(inBreak.filter { it.startMs > 8000 }.all { it.clip.transitionIn.type in soft })
+        // Jeder Schnitt bleibt exakt auf einem Beat
+        timed.forEach { assertEquals(0L, it.startMs % 500) }
+    }
+
+    @Test
+    fun offKeepsFixedGrid() {
+        val p = AutoCut.apply(project(false))
+        assertTrue(p.clips.all { it.durationBeats == 1 })
+    }
+}

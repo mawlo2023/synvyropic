@@ -150,6 +150,24 @@ class FrameResolver(private val project: Project, private val beatDecayMs: Float
         return if (e > s) ((t - s).toFloat() / (e - s)).coerceIn(0f, 1f) else 0f
     }
 
+    private val downbeatTimes: Set<Long> = run {
+        val grid = project.music?.beats
+        val start = project.music?.startMs ?: 0L
+        grid?.downbeatIndices?.mapNotNull { grid.beatsMs.getOrNull(it)?.minus(start) }?.toSet().orEmpty()
+    }
+
+    /** Millisekunden seit dem letzten Beat und ob dieser eine Takt-Eins war (für die Beat-Anzeige). */
+    fun sinceBeat(t: Long): Pair<Long, Boolean>? {
+        if (beatTimes.isEmpty() || beatTimes[0] > t) return null
+        var lo = 0
+        var hi = beatTimes.lastIndex
+        while (lo < hi) {
+            val mid = (lo + hi + 1) / 2
+            if (beatTimes[mid] <= t) lo = mid else hi = mid - 1
+        }
+        return (t - beatTimes[lo]) to (beatTimes[lo] in downbeatTimes)
+    }
+
     fun envelope(t: Long): Float {
         if (beatTimes.isEmpty()) return 0f
         var lo = 0

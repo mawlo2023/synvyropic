@@ -39,6 +39,13 @@
 - Schnittraster wählbar: Bildwechsel alle **1 / 2 / 4 Beats** oder „nur auf Betonungen“.
 - Komplett in Kotlin, keine GPL-Bibliotheken.
 
+### 3.1a Beat-Erkennung v2 (Version 1.2)
+- Verfeinerung: Beats rasten auf das Onset-Maximum (±3 Frames, parabolisch interpoliert) ein; gleitende Ausgleichsgerade über 9 Beats glättet Ausreißer; Analyse-Verzögerung kalibriert (+10 ms).
+- Gemessen an realistischen Testsignalen (Kick/Snare/Hi-Hat/Bass/Fläche, Swing, 88–170 BPM): mittlere Abweichung 4–6 ms, max. < 25 ms (vorher bis 42 ms, systematisch ~10 ms zu früh).
+- Lautheit je Beat → **Dynamischer Schnitt**: ruhig (< 0,6) → 2× halten, Break (< 0,35) → 4× halten (max. 8 Beats), dort weiche Blenden.
+- Korrektur: Tempo ×2/÷2, ±20 ms verschieben, Tap-Tempo, neu erkennen; ältere Analysen werden automatisch erneuert.
+- Vorschau: Musik ist die Uhr (MediaTimestamp), Bild wartet bis die Musik hörbar läuft; Beat-Anzeige (Punkt leuchtet auf jedem Beat, Takt-Eins in Magenta).
+
 ### 3.2 Übergänge (GPU-Shader, Priorität in dieser Reihenfolge)
 1. **RGB/Glitch** – RGB-Split, Chromatic Aberration, Digital Glitch (Block-Displacement), VHS (Scanlines, Tracking-Noise), Pixel-Sort, Datamosh-Look.
 2. **Bewegung/Zoom** – Zoom-Punch (in/out), Whip-Pan (4 Richtungen, mit Motion Blur), Spin, Shake, Stretch.
